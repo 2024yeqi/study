@@ -1,0 +1,1416 @@
+Operating Systems
+
+Prof. Yongkun Li
+- 
+http://staff.ustc.edu.cn/~ykli
+
+                                       Ch10, part2
+               Details of Ext2/3 File Systems
+
+                                                                                                                                                                          1
+Trivia
+
+· Extended File System (Ext2/3/4)
+
+    ­ Follow index-node allocation
+    ­ Primary FS for Linux distribution
+
+          ­ Ext4 was merged in the Linux 2.6.28 and released in 2008
+
+    ­ Backward-compatible
+    ­ For simplicity, we focus on Ext2/3
+
+          ­ Features of Ext2/3/4
+          ­ https://ext4.wiki.kernel.org/index.php/Main_Page
+          ­ http://e2fsprogs.sourceforge.net/ext2.html
+Details of Ext2/3
+   - Layout
+   - Inode and directory structure
+   - Link file
+   - Buffer cache
+   - Journaling
+   - VFS
+
+                                                                                                                                                                             3
+Details of Ext2/3
+   - Layout
+   - Inode and directory structure
+   - Link file
+   - Buffer cache
+   - Journaling
+   - VFS
+
+                                                                                                                                                                             4
+Index-node allocation
+
+· Ext2/3 file systems follow the index-node allocation
+
+Filename     Index                Index    Index   ...  Index
+            Node #               node #1  node #2
+rock.mp3                                                node #n-1
+game.exe        1
+ubuntu.iso      2                ...      ...           ...
+                3
+                                 ...      ...           ...
+
+                                          It is arranged as an array. So,
+                                          looking up an index node will be fast.
+
+Index Node  F
+    Table   R Root
+            E Directory
+            E                             11            21         30
+
+                              1
+
+                                                                                  5
+Specific Layout
+
+   · The file system is not that simple...
+
+        ­ it is divided into groups
+Specific Layout
+
+· The file system is not that simple...
+
+   ­ it is divided into groups
+   ­ every group has the same structure.
+
+Group 0                      G   Block  Inode   Inode         Data
+         Superblock D           Bitmap  Bitmap  Table        Blocks
+
+                             T
+
+         They are                       They are different.
+         the same.
+
+Group 1                      G   Block  Inode   Inode         Data
+         Superblock D           Bitmap  Bitmap  Table        Blocks
+
+                             T
+Specific Layout
+
+   · Why doing so?
+
+Group 0                      G   Block  Inode   Inode         Data
+         Superblock D           Bitmap  Bitmap  Table        Blocks
+
+                             T
+
+         They are                       They are different.
+         the same.
+
+Group 1                      G   Block  Inode   Inode         Data
+         Superblock D           Bitmap  Bitmap  Table        Blocks
+
+                             T
+Specific Layout
+
+   · Why doing so?
+
+        ­ For reliability...
+
+Group 0                      G   Block  Inode   Inode         Data
+Group 1  Superblock D           Bitmap  Bitmap  Table        Blocks
+
+                             T
+
+                   There are many copies of the superblock So, this
+
+                   increases the reliability of the FS.
+
+         They are                       They are different.
+
+         the same. The superblock in Group 0 is called the primary superblock.
+
+                   Other superblocks are called the backup superblock.
+
+                             G   Block  Inode   Inode         Data
+         Superblock D           Bitmap  Bitmap  Table        Blocks
+
+                             T
+Specific Layout
+
+   · Why doing so?
+
+        ­For performance...
+
+Group 0  Superblock  GDTE.g.B,Bitlmocakp  Inode   Inode                          Data
+Group 1                                   Bitmap  Table                         Blocks
+          They are
+         the same.   - Inode table in Group 0 stores inodes from #1 to #100;
+
+         Superblock  - Inode table in Group 1 stores inodes from #101 to #200;
+
+                     - etc... They are different.
+
+                     The good about this is to keep the inodes and the file
+
+                     GDTcontBeBintlmotcsakpclosBeInittomodagepetherTI!naobdlee   Data
+                                                                                Blocks
+Specific Layout
+
+   · Why doing so?
+
+        ­ For performance...
+
+                                   The inodes in a particular group will usually refer to the
+                                   data blocks in the same group.
+
+                                   So, this keeps them close together in a physical sense.
+                                   The storage device may be able to locate the data in a
+                                   faster manner. (Remember the principle of locality?)
+
+                  ......
+
+Group 0  Group 1          Group n-1
+Layout in Each Group
+
+                                G  Block   Inode             Inode         Data
+            Superblock D           Bitmap  Bitmap            Table        Blocks
+
+                                T
+
+Superblock                         Stores FS specific data.
+
+                                   Total number of inodes in the system.
+                                   Total number of blocks in the system.
+                                   Number of reserved blocks
+                                   Total number of free blocks.
+                                   Total number of free inodes.
+                                   Location of the first block.
+                                   The size of a block.
+
+                                                                                  12
+Layout in Each Group
+
+                                  G  Block   Inode   Inode   Data
+              Superblock D           Bitmap  Bitmap  Table  Blocks
+
+                                  T
+
+Superblock                           Stores FS specific data. E.g., the total number of blocks, etc.
+
+GDT ­ Group Descriptor Table         It stores:
+                                     -The starting block numbers of the block bitmap, the inode
+                                     bitmap, and the inode table.
+                                     - Free block count, free inode count, etc...
+
+Inode Table                          An array of inodes ordered by the inode #.
+Data Blocks                          An array of blocks that stored files.
+
+Block Bitmap                         A bit string that represents if a block is allocated or not.
+Inode Bitmap                         A bit string that represents if an inode is allocated or not.
+
+                                                                                                      13
+Layout in Each Group
+
+ · What is a block bitmap?
+
+      ­ A sequence of bits indicates the allocation of
+        the blocks.
+
+It says "blocks 0-2 are allocated ",
+then "block 3 is unallocated "...
+
+111010111011                           0 Unallocated
+                                       1 Allocated
+
+                    G  Block   Inode   Inode   Data
+Superblock D           Bitmap  Bitmap  Table  Blocks
+
+                    T
+Layout in Each Group
+
+· Then, what is an inode bitmap?
+
+    ­ A sequence of bits indicates the allocation of
+       the inodes.
+
+    ­ This implies that...
+
+                The number of files in the file system is fixed!
+
+111010111011                           0 Unallocated
+                                       1 Allocated
+
+                    G  Block   Inode   Inode   Data
+Superblock D           Bitmap  Bitmap  Table  Blocks
+
+                    T
+Details of Ext2/3
+   - Layout
+   - Inode and directory structure
+   - Link file
+   - Buffer cache
+   - Journaling
+   - VFS
+
+                                                                                                                                                                           16
+Inode Structure
+
+· We know that...
+
+­ The locations of the data blocks of a file are stored in
+
+the inode.                                  1st layer of       2nd layer of
+                                            indirect           indirect
+                                            blocks             blocks
+
+Index node structure
+
+Direct Block #0
+
+Direct Block #1             ...
+
+...                    ...                                ...
+
+Direct Block #11
+
+Indirect Block
+
+Double Indirect Block
+
+Triple Indirect Block
+
+                                       ...
+
+Data Block                  Data Block storing
+storing data.               block address.
+Inode Structure
+
+      Inode Structure (128 bytes long)
+
+Bytes                    Value                What are stored in inode
+                                              besides block addresses?
+0-1    File type and permission
+                                                An inode is the structure that
+2-3    User ID                                  stores every information about
+                                                a file.
+4-7    Lower 32 bits of file sizes in bytes
+                                                The locations of the data
+8-23   Time information                         blocks
+
+24-25 Group ID
+
+26-27 Link count
+
+...    ...
+
+40-87 12 direct data block pointers
+
+88-91 Single indirect block pointer
+
+92-95 Double indirect block pointer
+
+96-99 Triple Indirect block pointer
+
+...    ...
+
+108-111 Upper 32 bits of file sizes in bytes
+
+More details: https://ext4.wiki.kernel.org/index.php/Ext4_Disk_Layout#Inode_Table
+Inode Structure
+
+       Inode Structure (128 bytes long)        What is the maximum file
+                                               size supported?
+Bytes                    Value
+                                               264 ­ 1
+0-1    File type and permission                = 16 x 230 Gbytes ­ 1 byte
+
+2-3    User ID                                 Is this really the case?
+
+4-7    Lower 32 bits of file sizes in bytes   Remember the dominating
+                                              factor: 24x-6
+8-23   Time information
+
+24-25 Group ID
+
+26-27 Link count
+
+...    ...
+
+40-87 12 direct data block pointers
+
+88-91 Single indirect block pointer
+
+92-95 Double indirect block pointer
+
+96-99 Triple Indirect block pointer             Block size     File size
+                                              1024B = 210   ~16 Gbytes
+...    ...                                    4096B = 212   ~4 Tbytes
+
+108-111 Upper 32 bits of file sizes in bytes
+Inode Structure
+
+       Inode Structure (128 bytes long)       What is link count?
+                                              We will talk about it later
+Bytes                    Value
+                                              Where is the file name?
+0-1    File type and permission
+                                              Let us take a look at the
+2-3    User ID                                    directory structure
+
+4-7    Lower 32 bits of file sizes in bytes
+
+8-23   Time information
+
+24-25 Group ID
+
+26-27 Link count
+
+...    ...
+
+40-87 12 direct data block pointers
+
+88-91 Single indirect block pointer
+
+92-95 Double indirect block pointer
+
+96-99 Triple Indirect block pointer
+
+...    ...
+
+108-111 Upper 32 bits of file sizes in bytes
+Directory Structure
+
+Filename     Index  The directory entry stores the file
+            Node #  name and the inode #.
+rock.mp3
+game.exe        1
+ubuntu.iso      2
+                3
+
+1 int main(void) {
+
+2     DIR * dir;
+
+3     struct dirent *entry;
+
+4
+
+5     dir = opendir("/");
+
+6     while s(tr(uecnttrdyir=enrtea{ddir(dir)) != NULL) {
+
+7           // printintoh_et directory nadm_eino;      // inode number
+
+8           printfo(f"f%_st\n", entry->dd__noafmfe;);  // offset to the next dirent
+
+9                   unsigned short d_reclen; // record length
+
+10    }             unsigned char d_type;              // file type
+
+11    crleotsuredn}ir0(;dcihra)r; *  d_name;           // file name
+
+12
+13
+
+14 }
+Directory Structure                       A Linux directory with
+                                          three files
+               inode number
+                  Entry size
+                      Type
+                        File name length
+
+10  F 4 rock 18  F 4 game 50              F 5 ubuntu unused
+
+    struct dirent {        d_ino;         // inode number
+           ino_t           d_off;         // offset to the next dirent
+           off_t           d_reclen;      // record length
+           unsigned short  d_type;        // file type
+           unsigned char   d_name;        // file name
+           char *
+
+    }
+Directory Structure                       A Linux directory with
+                                          three files
+               inode number
+                  Entry size
+                      Type
+                        File name length
+
+10  F 4 rock 18  F 4 game 50                  F 5 ubuntu unused
+
+                                          After game has been removed
+
+10  F 4 rock     unused                   50  F 5 ubuntu unused
+Accessing Directory File
+
+· How to access directory file?
+
+                                      Note: opendir(), readdir(),
+
+1 int main(void) {                    and closedir() are library
+                                      function calls.
+2     DIR * dir;
+
+3     struct dirent *entry;
+
+4
+
+5     dir = opendir("/");                        Open the directory file.
+
+6
+
+7     while ( (entry = readdir(dir)) != NULL) {  Read the directory
+                                                 entries one by one until
+8        // print the directory name             there is not further
+                                                 entries.
+9        printf("%s\n", entry->d_name);
+
+10    }
+
+11
+
+12    closedir(dir);                             Close the directory file.
+
+13    return 0;
+
+14 }
+Details of Ext2/3
+   - Layout
+   - Inode and directory structure
+   - Link file
+   - Buffer cache
+   - Journaling
+   - VFS
+
+                                                                                                                                                                           25
+Link File
+
+   · Can we allow a file to have multiple names and
+     be accessed by several paths?
+
+   · How to create shortcuts?
+
+Example use in Linux                   # ls /dir1/12.jpg
+                                       12.jpg
+           # ls /dir1/12.jpg           # ln ­s /dir1/12.jpg /my_link
+           12.jpg                      #_
+           # ln /dir1/12.jpg /my_link
+           #_
+
+These are called hard link and symbolic link
+Link File ­ what is a hard link?
+
+· A hard link is a directory entry pointing
+  to an existing file.
+
+   ­ No new file content is created!
+
+              # ls /dir1/12.jpg                A new directory entry
+              12.jpg                           is created.
+              # ln /dir1/12.jpg /my_link
+              #_
+
+Directory: /dir1                          Directory: /
+
+Inode #  ... Filename  Inodee #           ... Filename
+  123                      2
+    2    ...  .            2              ...           .
+ 5,086
+         ...  ..        5,086             ...           ..
+
+         ... 12.jpg                       ... my_link
+Link File ­ what is a hard link?
+
+   · Conceptually speaking, this creates a file
+      with two pathnames. How to maintain this info.
+
+                                                                          Inode #: 5086
+
+Directory: /dir1       Directory: /
+
+Inode #  ... Filename  Inode #  ... Filename
+  123                      2
+    2    ...  .            2    ...  .
+ 5,086
+         ...  ..        5,086   ...  ..
+
+         ... 12.jpg             ... my_link
+Link File ­ what is a link count?
+
+· There is a field called link count in an inode.
+
+   ­ It stores the number of directory entries pointing to
+      the inode.
+
+                                                                           Inode #: 5086
+                                                                         Link Count 2
+
+Directory: /dir1       Directory: /
+
+Inode #  ... Filename  Inode #  ... Filename
+  123                      2
+    2    ...  .            2    ...  .
+ 5,086
+         ...  ..        5,086   ...  ..
+
+         ... 12.jpg             ... my_link
+Link File ­ showing the link counts
+
+· Special hard links
+
+   ­ The directory "." is a hard link to itself.
+   ­ The directory ".." is a hard link to the parent directory.
+
+           What does this large
+
+# ls -l /  number imply?
+
+total 124
+
+drwxr-xr-x 2 root root 4096 2015-11-15 08:07 bin
+
+drwxr-xr-x 4 root root 4096 2015-11-11 09:25 boot
+drwxr-xr-x 17 root root 14520 2015-11-23 17:58 dev
+drwxr-xr-x 165 root root 12288 2015-11-23 17:58 etc
+drwxr-xr-x 6 root root 4096 2015-06-21 14:23 home
+
+......
+
+           This implies "/etc" has a lot of sub-directories.
+Link File ­ showing the link counts
+
+· Special hard links
+
+    ­ The directory "." is a hard link to itself.
+    ­ The directory ".." is a hard link to the parent directory.
+
+· What is the value of the link count, if
+
+   ­ A file is created
+   ­ A directory is created
+Link File ­ showing the link counts
+
+· When a regular file is created, the link count is always 1
+
+# stat Makefile     Blocks: 16       IO Block: 4096 regular file
+ File: `Makefile'   Inode: 30669     Links: 1
+   Size: 4552
+
+Device: 801h/2049d
+......
+
+· When a directory is created, the initial link count is
+   always 2
+
+# mkdir temp        Blocks: 8        IO Block: 4096  directory
+# stat temp         Inode: 10994310  Links: 2
+
+   File: `temp'
+   Size: 4096
+Device: 804h/2052d
+......
+
+                                     Why it is 2
+Link File ­ showing the link counts
+
+Parent of "temp"                                   link #2  The new directory "temp"
+
+Inode # ... Filename          Inode #: 10,994,310           Inode # ... Filename
+                                Link Count
+                                                            10,994,310 ...    .
+123  ...  .
+                                                            123    ...        ..
+2    ...  ..
+
+10,994,310 ... temp
+
+                     link #1
+
+· When a directory is created, the initial link count is
+   always 2. Why?
+
+# mkdir temp          Blocks: 8                    IO Block: 4096  directory
+# stat temp           Inode: 10994310              Links: 2
+
+   File: `temp'
+   Size: 4096
+Device: 804h/2052d
+......
+Link File ­ showing the link counts
+
+Parent of "temp"      The new directory "temp"
+
+Inode # ... Filename  Inode # ... Filename
+
+123 ...         .     10,994,310 ...  .
+
+2  ...          ..    123  ...        ..
+
+10,994,310 ...  temp
+
+· The hosting directory of the newly creating directory
+   will have its link count increased by 1.
+Link File ­ decrementing the link count?
+
+· How about removing a file?
+
+             Directory: /dir1
+
+             Inode #  ... Filename   Inode #: 5086
+               123                  Link Count 1
+                 2    ...      .
+              5,086                    Inode #: 5086
+                      ...      ..    Link Count 0
+
+                      ... 12.jpg
+
+Removing     Directory: /dir1
+the file...
+
+             Inode #  ... Filename
+               123
+                 2    ...  .
+              5,086
+                      ...  ..
+
+                      ... 12.jpg
+Link File ­ decrementing the link count?
+
+· How about removing a file?
+
+    ­ The system call that removing a file is, therefore,
+       called unlink().
+
+          · The unlink() system call is to decrement the link count by
+             exactly one.
+
+          · When the link count == 0, the data blocks and the inode
+             will all be de-allocated by the kernel.
+
+Directory: /dir1                   De-allocated
+
+Inode #  ... Filename   Inode #: 5086
+  123                  Link Count 0
+    2    ...  .
+ 5,086
+         ...  ..
+
+         ... 12.jpg
+Link File ­ decrementing the link count?
+
+· Back to the previous hard link example...
+
+Directory: /dir1       # ls /dir1/12.jpg
+                       12.jpg
+Inode #  ... Filename  # ln /dir1/12.jpg /my_link
+  123
+    2    ...      .
+ 5,086
+         ...      ..
+
+         ... 12.jpg
+
+Directory: /
+
+Inode #  ... Filename   Inode #: 5086
+    2
+    2                  Link Count 212
+
+ 5,086   ...      .
+
+         ...      ..
+
+         ... my_link
+Link File ­ decrementing the link count?
+
+· Back to the previous hard link example...
+
+Directory: /dir1       # ls /dir1/12.jpg
+                       12.jpg
+Inode #  ... Filename  # ln /dir1/12.jpg /my_link
+  123                  # rm /dir/12.jpg
+    2    ...      .    # rm /my_link
+ 5,086
+         ...      ..
+
+         ... 12.jpg
+
+Directory: /                      De-allocated
+
+Inode #  ... Filename   Inode #: 5086
+    2
+    2                  Link Count 120
+
+ 5,086   ...      .
+
+         ...      ..
+
+         ... my_link
+Link File ­ what is a symbolic link?
+
+· A symbolic link is a file.
+
+­ Unlike the hard link, a new inode is created
+  for each symbolic link.
+
+­ It stores the pathname (shortcut)
+
+              # ls /dir1/12.jpg                   A new directory
+              12.jpg                              entry is created.
+              # ln ­s /dir1/12.jpg /my_link
+              # ls ­l /mylink
+              /mylink -> /dir1/12.jpg
+              #
+
+Directory: /dir1                Directory: /
+
+Inode #  ... Filename           Inode #      ... Filename
+  123                               2
+    2    ...  .                     2        ...  .
+ 5,086
+         ...  ..       Another   6,120       ...  ..
+                       inode
+         ... 12.jpg                          ... my_link
+Link File ­ what is a symbolic link?
+
+ · How to store the target path?
+
+     ­ If the pathname is less than 60 characters
+         ­ It is stored in the 12 direct block and the 3
+            indirect block pointers.
+
+     ­ Else, one extra data block is allocated
+
+Inode #: 6120       (12 + 3) x 4 = 60
+                                              Directory: /
+Link Count       1
+
+Direct #0           Inode #  ... Filename
+                        2
+......                  2    ...                            .
+
+Single Indirect      6,120
+
+Double Indirect              ...                            ..
+
+Triple indirect              ... my_link
+Short summary
+
+· Hard link
+
+   ­ A directory entry pointing to an existing file
+   ­ They point to the same inode (no new file content)
+   ­ A file with two pathname
+   ­ Remove file == unlink (link count - 1)
+   ­ Examples: dot/dot dot
+
+· Symbolic link
+
+   ­ A file with a new inode
+   ­ Stores the target pathname
+   ­ Shortcuts
+Details of Ext2/3
+   - Layout
+   - Inode and directory structure
+   - Link file
+   - Buffer cache
+   - Journaling
+   - VFS
+
+                                                                                                                                                                           42
+File system performance
+
+· Recall the read/write process
+
+   ­ Directory traversal
+   ­ Reading inode
+   ­ Data blocks
+
+Index Node  F
+    Table   R Root
+            E Directory
+            E
+
+How to improve file system performance?
+Kernel Buffer Cache
+
+· Kernel Buffer Cache
+
+   ­ The kernel will keep a set of copies of the read/written
+      data blocks.
+
+   ­ The space that stores those blocks are called the buffer
+      cache.
+
+   ­ It is used for reducing the time in accessing those blocks
+      in the near future
+
+· Why effective?
+
+   ­ Principle of locality
+
+                                                                                                                                                                             44
+Kernel Buffer Cache
+
+· What need to be cached?
+
+   ­ Data blocks, directory file, inode?
+   ­ All of them can benefit from caching
+
+Index Node  F
+    Table   R Root
+            E Directory
+            E
+
+                                           45
+Kernel Buffer Cache
+
+· Three types of buffer caches!
+
+Page Cache       It buffers the data blocks of an opened file.
+
+Directory entry  Directory entry is stored in the kernel.
+(dcache) cache   The content of an inode is stored in the kernel temporary.
+
+Inode cache
+
+Remember, those cached data is stored in the kernel even
+though the corresponding file is closed!
+By the way, the cache is managed under the LRU algorithm.
+
+                                                                                                                                                              46
+Kernel Buffer Cache
+
+Read/write mode with kernel buffer cache
+
+Mode         Description
+
+Reading mode When a process reads a file, the data will be cached automatically.
+
+             E.g., Readahead system call
+
+Ways         Descriptions
+System call  ssize_t readahead(int fd, off64_t offset, size_t count);
+
+             A blocking system call that stores requested range of data into the kernel
+             page caches
+
+             Later read() calls over the range will not block.
+
+                                                                                         47
+Readahead
+
+· How does it work?
+
+    ­ When a file reading operation is requesting for Block x, there is a
+       chance that Block x+1 will also be needed.
+
+    ­ Such a chance depends on:
+
+           · The file reading mode: sequential access or random access.
+           · The file reading history: whether the process prefers reading sequentially
+
+             or not.
+
+    ­ If such a chance is high, then reading a series of continuous
+       blocks will reduce the number of disk accesses. Why?
+
+           · Because the disk head is not always stopped at your desired locations.
+           · Because a mechanical disk is good at reading sequential data.
+           · How about SSD?
+
+                                                                                                                                                                             48
+Kernel Buffer Cache
+
+ Read/write mode with kernel buffer cache
+
+How about write?
+
+Mode        Description
+
+Write-through Both the on-disk and the cached copies update together.
+mode
+
+                     E.g., The write() system call will not return until the on-disk copy is written.
+
+Write-back  When a piece of data is going to be written to a file, the cached copy is
+mode        updated first. The update of the on-disk copy is delayed.
+
+            On-demand writing dirty blocks back.
+
+            Command: sync
+            System calls: sync(), fsync()
+
+                                                                                                       49
+Details of Ext2/3
+   - Layout
+   - Inode and directory structure
+   - Link file
+   - Buffer cache
+   - Journaling
+   - VFS
+
+                                                                                                                                                                           50
+File System Consistency
+
+ · Think about caching...tradeoff?
+
+     ­ System inconsistency exists
+
+          · Power failure, pressing reset button accidentally; etc.
+
+ · Disk only provides
+
+     ­ atomic write of one sector at a time
+
+ · A write may require modifying several sectors
+
+     ­ How to atomically update file system from one
+       consistent state to another?
+
+         The file system journal is the current, state-
+         of-the-art practice.
+Example: Journaling File System
+
+You write down all the tasks                        Your boss orders
+assigned to you into a log book.                    you to do a set of tasks!
+
+             Task list:                                                                                          52
+             1) Buy boss a DC.
+             2) Pick up boss' friend.
+             3) Drive his friend back to his home.
+             4) Buy boss a coffee when I return.
+Example: Journaling File System
+
+Task list:                             You cross out a
+1) Buy boss a DC.                      task when
+2) Pick up boss' friend.               it is completed.
+3) Drive his friend back to his home.
+
+4) Buy boss a coffee when I return.
+
+                                                         53
+Example: Journaling File System
+
+Unfortunately, a car accident happens!
+       You lost all your memory!!
+
+The log book                            Your boss sends your
+comes in handy!                         colleague to finish your job.
+                                        But, he doesn't know about
+                                        your progress.
+
+                                        Worse, your boss has
+                                        forgotten what are the tasks
+                                        given to you!
+
+                                                                                                  54
+Example: Journaling File System
+
+     User Program         FS operations invoked by the user program
+
+OS                                 Task list:
+                                   1) Buy boss a DC.
+            File system            2) Pick up boss' friend.
+           recovery tool           3) Drive his friend back to his home.
+                                   4) Buy boss a coffee when I return.
+
+                                                                    System crash!
+                                                                    All memory lost!
+
+                                                                                   The journal!
+
+                                                                                                                                55
+What is journal?
+
+· A journal is the log book for the file system.
+
+   ­ It is kept inside the file system, i.e., inside the disk.
+
+FS Data Journal                Data blocks
+
+a new item
+
+· In database: Write-ahead logging
+
+· In file systems: Journaling
+
+­ Applications: Linux ext3 and ext4, Windows NTFS
+
+Basic idea: when updating the disk, before overwriting the structures in
+place, first write down a little note describing what you are about to do
+
+                                                                           56
+What is journal?
+
+· In order to make use of the journal:
+
+    ­ A set of file system operations becomes an atomic
+      transaction.
+
+         · Either all operations are completed successfully, or
+         · no operation is completed.
+
+    ­ A transaction marks all the changes that will be done
+      to the FS.
+
+    ­ Every transaction is written to the journal.
+
+                                                                                                                                                                             57
+Journaling in Linux ext3
+
+· How does Linux ext3 incorporate the journaling?
+
+    ­ Most of on-disk structures are identical to Linux ext2
+    ­ The new key structure is the journal itself
+    ­ It occupies some small amount of space within the
+
+      partition or on another device
+
+      Ext2
+
+      Ext3
+
+                                                                                                                                                                             58
+Data Journaling
+
+· How to do journaling?
+
+· Task: update inode (I[v2]), bitmap (B[v2]), and
+   data block (Db) to disk
+
+    ­ Metadata + data
+
+· Strategy: Data journaling
+
+    ­ Write all data (metadata+data) to journal
+
+         · Before writing them to their final disk locations, we first write
+            them to log (a.k.a. journal)
+
+    ­ An available mode with the Linux ext3 file system
+
+                                                                                                                                                                             59
+Data Journaling
+
+· Journal layout:
+
+    ­ TxB: Transaction begin block
+
+         · It contains some kind of transaction identifier (TID)
+
+    ­ TxE: Transaction end block
+
+         · Marker of the end of this transaction
+         · It also contain the TID
+
+· Checkpoint
+
+    ­ Overwrite the old structures in the file system after the
+      transaction being safely on disk
+
+                                                                                                                                                                             60
+Data Journaling
+
+· Operation sequence:
+
+    ­ Journal write
+        · Write the transaction to log and wait for these
+          writes to complete
+        · TxB, all pending data, metadata updates, TxE
+
+    ­ Checkpoint
+        · Write the pending metadata and data updates to
+          their final locations
+
+· Any problem with this flow?
+
+    ­ What if crash occurs during the writes to journal
+
+                                                                                                                                                                             61
+Data Journaling
+
+· We need to write the set of blocks (TxB, I[v2],
+   B[v2], Db, TxE)
+
+    ­ Issue one block at a time
+
+         · It is slow because of waiting for each to complete
+
+    ­ Issue all blocks at once
+
+         · Five writes -> a single sequential write: Faster way
+         · However, it is unsafe...
+
+                · The disk internally may perform scheduling and complete small
+                   pieces of the big write in any order
+
+                                                                                                                                                                             62
+Data Journaling
+
+· Issue all blocks at once
+
+    ­ Suppose: disk internally
+
+         · (1) writes TxB, I[v2], B[v2], TxE and later
+         · (2) writes Db
+
+    ­ When crash occurs during the writes to journal
+
+         · If the disk loses power between (1) and (2)
+
+           Problem: Transaction looks like a valid transaction, but
+    the file system can't look at the fourth block and know it is wrong
+
+                                                                                                                                                                             63
+Data Journaling
+
+· How to solve this problem?
+
+   ­ Issue transactional write in two steps
+
+         · First step: writes all blocks except the TxE block to journal
+
+                                                                        Journal
+                                                                         write
+
+         · Second step: file system issues the write of the TxE
+
+                                      Journal
+                                      commit
+
+Make sure the write of TxE is atomic
+
+                                                                                 64
+Data Journaling
+
+· Operation sequence:
+
+    ­ Journal write
+        · Write the contents of the transaction (including TxB,
+          metadata, and data)
+
+    ­ Journal commit
+        · metadata, and data (including TxE)
+
+    ­ Checkpoint
+        · Write the contents of the update to their on-disk
+          locations
+
+                   The write order must be guaranteed
+
+                                                                                                                                                                             65
+Data Journaling
+
+· How to do recovery?
+
+    ­ Case 1: crash happens before journal commit
+                    Easy! Skip the pending update
+
+    ­ Case 2: crash happens after journal commit, but
+      before checkpoint
+         Replay transactions in order. Called redo logging
+
+                                                                                                                                                                             66
+Data Journaling
+
+· The log is of finite size
+
+   ­ What problems may arise if it is full?
+
+         · Long time to replay
+         · Unable to append new transactions
+
+· Manage as a circular log
+
+   ­ Free space after checkpointing
+
+                                                                                                                                                                             67
+Data Journaling
+
+· Write sequence
+
+Journal           Journal   Checkpoint  Free
+
+write             commit
+
+· Data Journaling Timeline
+
+                                              68
+Metadata Journaling
+
+· Any problem with data journaling?
+
+    ­ Write every Db to disk twice
+
+         · Commit to log (journal file)
+         · Checkpoint to on-disk location
+
+· How to avoid writing twice?
+
+    ­ Metadata journaling: Logging metadata only
+
+           This data is not written to journal
+
+                                                                                                                                                                             69
+Metadata Journaling
+
+· Write-back mode: no order restriction (data/journal)
+
+   ­ How about data is written to disk after journal commit?
+
+         · File system is consistent (from the perspective of metadata)
+         · Metadata points to garbage data
+
+· Ordered mode
+
+   ­ Data is written to file system before journal commit
+   ­ Rule:
+
+         · Write the pointed-to object before the object that points to it
+         · Core of crash consistency
+
+   ­ Widely deployed by Ext3, NTFS, etc.
+
+                                                                                                                                                                             70
+Metadata Journaling
+
+· Write sequence
+
+Data   Journal         Journal  Checkpoint  Free
+
+write  metadata        commit   metadata
+
+       write
+
+The two writes can be
+issued in parallel
+
+                                                  71
+Summary on journal
+
+· Working principle:
+
+    ­ All the changes to the FS are written to the journal
+      first, including:
+
+         · the changes in the metadata, i.e., information other than the
+            file content. E.g., the inodes, the directory entries, etc.
+
+         · the file data (depends on data journaling/metadata
+            journaling)
+
+    ­ Then, the system call returns to the user process.
+    ­ Meanwhile, the entries in the journal are replayed and
+
+      the changes are reflected to the actual file system.
+
+                                                                                                                                                                             72
+Details of Ext2/3
+   - Layout
+   - Inode and directory structure
+   - Link file
+   - Buffer cache
+   - Journaling
+   - VFS
+
+                                                                                                                                                                           73
+Virtual File System (VFS)
+
+ · Old days: "the" file system
+ · Nowadays: many fs types
+
+   and instances co-exist
+
+  VFS: an FS abstraction layer
+
+      ­ Transparently and uniformly supports multiple FSes
+      ­ A VFS specifies an interface
+      ­ A specific FS implements this interface
+VFS
+
+· Let's look into the implementation of open().
+
+          struct file  struct file_operations {
+                             loff (*llseek)...
+                             ssize_t (*read)...
+                             ......
+                             int (*open) ...
+                             ......
+
+                       }
+
+     710  if (f->f_op && f->f_op->open) {
+
+     711               error = f->f_op->open(inode,f);
+
+     712               if (error)
+
+     713               goto cleanup_all;
+
+     714  }
+
+                       http://lxr.linux.no/linux-old+v2.4.31/fs/open.c
+
+                                                                                                                                   75
+VFS
+
+· For each file system, they have their own set of file
+  operations.
+
+     Parent Methods        FAT32 Methods.
+         VFS layer
+                     fat_file_operations
+                     http://lxr.linux.no/linux-
+                     old+v2.4.31/fs/fat/file.c#L26
+
+     open    read           Ext3 Methods.
+     write  llseek
+                     ext3_file_operations
+                     http://lxr.linux.no/linux-
+                     old+v2.4.31/fs/ext3/file.c#L113
+
+                                                      76
+VFS
+
+· So, the beauty in such design is that:
+
+    ­ The caller, i.e. the VFS layer, doesn't need to care
+      about nor hard-coding which FS you are working on.
+
+                              error = f->f_op->open(inode,f);
+
+                         The only things that require hard-coding are:
+                         - The definition of the file operations.
+                         - The assignment of file operation structures for each FS.
+
+                                                                                                                                                                             77
+VFS
+
+· A follow-up question is:
+
+    ­ What if a FS does not support a particular subset of
+      operations?
+
+    ­ E.g., FAT32 does not need to implement chmod()!
+
+    ­ Solution?
+
+         · Simple! Using NULL pointers!
+         · When a NULL pointer to a file is detected, returning an error
+
+            or proceed without any changes.
+
+                                                                                                                                                                             78
+Summary
+
+· Ext* file systems are the primary FS for Linux
+
+   ­ They follow the index-node allocation
+   ­ We talked about...
+
+         · Detailed layout (grouping, bitmaps)
+         · Inode structure
+         · Directory structure
+         · Link file (hard link and symbolic link)
+         · Kernel buffer cache and readahead
+         · Journaling (data journaling, metadata journaling)
+         · VFS
+
+                                                                                                                                                                             79
+

@@ -1,0 +1,834 @@
+Operating Systems
+Prof. Yongkun Li -  http://staff.ustc.edu.cn/~ykli
+
+Chapter 8 Mass Storage
+1
+
+Topics in Part 3 (Storage Management)
+
+User Space
+
+KV, Distributed FS, Graph System...
+
+Processes
+
+Operating System Kernel
+
+File system Implementation
+FAT32, EXT2/3
+
+File System Operations
+
+Devices
+2
+
+Storage Hierarchy
+3
+
+Topics (Mass Storage)
+
+Disk Structure Disk Scheduling SSD Structure SSD Features/Issues
+RAID Erasure Coding
+4
+
+Topics - Disk structure - Disk scheduling - Solid-state drives (SSDs) - RAID & Erasure coding
+5
+
+Hard Disk Structure ­ Physical view
+Physical address (cylinder, track, sector)
+Track: The surface of a platter is divided into tracks Sector: Track is divided into sectors (512B data + ECC) Cylinder: Set of tracks that are at one arm position
+Access: Seek + Rotate
+Seek time: move disk arm to desired cylinder
+Rotational latency: spin at 5400/7200/10K/15K RPM
+
+Hard Disk Structure ­ Physical view
+Constant liner velocity (CLV)  Uniform density of bits per track,
+outer track hold more sectors  Variable rotation speed to keep the
+same rate of data moving  CD-ROM/DVD-ROM
+Constant angular velocity (CAV)  Constant rotation speed  Higher density of bits in inner tracks  Hard disks
+
+Hard Disk Structure ­ Logical view
+How to use? Large 1-D arrays of logical blocks (usually 512 bytes)
+Address mapping Logical block number -> (cylinder #, track #, sector #)
+Disk management is required
+ Disk formatting
+ Disks are prone to failures: defective sectors are common (bad blocks)  Need to handle defective sectors: bad block management
+
+Disk Management
+Disk Formatting
+Step 1: Low-level formatting/physical formatting  Divide into sectors so disk controller can read/write  Fills the disk with a special data structure for each sector (data area(512B),
+header and trailer (sector number & ECC)) · The controller automatically does the ECC processing whenever a sector
+is read/written  Done at factory, used for testing and initializing (e.g., the mapping). It is also
+possible to set the sector size (256B, 512B, 1K, 4K)
+
+Disk Management
+Disk Formatting
+Step 2: How to use disks to hold files after shipment?
+ Choice 1: File system  Partition into one or more groups of cylinders (each as a separate disk)  Logical formatting: creating a FS by storing the initial FS data structures  I/O optimization: Disk I/O (via blocks) & file system I/O (via clusters), why?
+· More sequential access, fewer random access
+ Choice 2: Raw disk  Use disk partition as a large sequential array of logical blocks, without FS  Raw I/O: bypass all FS services (buffer cache, prefetching...), be able to
+control exact disk location
+
+Disk Management
+Bad Block Management
+ Maintain a list of bad blocks (initialized during low-level formatting) and preserve an amount of spare sectors
+ Sector sparing/forwarding: replace a bad sector logically with one spare sector · Problem: invalidate disk scheduling algorithm · Solution: spare sectors in each cylinder + spare cylinder
+ Sector slipping: remap to the next sector (data movement is needed)
+
+Topics - Disk structure - Disk scheduling - Solid-state drives (SSDs) - RAID & Erasure coding
+12
+
+Why needed?
+· Requests are placed in the queue of pending requests for that drive if the drive/controller is busy
+
+Pending queue
+
+R1
+
+R2
+
+...
+
+Rn
+
+Read/write, disk address, memory address, number of sectors to be transferred
+
+13
+
+What is disk scheduling
+· I/O access procedure
+­ Seek
+· move the head to the desired cylinder
+­ Rotate
+· spin to the target sector on the track
+Request ordering significantly affects the access performance (seek + rotate),
+so scheduling is needed
+Disk schedulingChoose the next
+request in the pending queue to service so as to minimize the seek time (scheduling algorithms)
+14
+
+FCFS Scheduling
+· First-come, first-served (FCFS)
+­ Intrinsically fair, but does not provide the fastest service
+15
+
+FCFS Scheduling
+· First-come, first-served (FCFS)
+
+14 37 53 65 67 0
+
+98 122 124
+
+183
+
+Platter
+
+Platter
+
+98
+
+183
+
+37
+
+122
+
+199
+
+14
+
+124
+
+65
+
+67 Request Queue
+
+16
+
+FCFS Scheduling
+· Scheduling diagram
+
+Total head movement (640 cylinders)
+Wild swing is very common E.g.: 122 to 14, then to 124
+How to reduce the head movement? Handle nearby requests first
+17
+
+SSTF Scheduling
+· Shortest seek time first (SSTF)
+­ Choose the request with the least seek time ­ Choose the request closest to the current head position
+18
+
+SSTF Scheduling
+· Shortest seek time first (SSTF)
+
+14 37 53 65 67 0
+
+98 122 124
+
+183
+
+Platter
+
+Platter
+
+98
+
+183
+
+37
+
+122
+
+199
+
+14
+
+124
+
+65
+
+67 Request Queue
+
+19
+
+SSTF Scheduling
+· Scheduling diagram
+
+Total head movement: 236 cylinders (it is 640 for FCFS)
+Essentially a form of SJF scheduling
+It is not optimal The sequence of 53-37-14-65... could reduce the head movement to 208
+It may cause starvation
+20
+
+SCAN Scheduling
+· Scan back and forth
+­ Starts at one end, moves toward the other end ­ Service the requests as it reaches each cylinder ­ Reverse the direction ­ Elevator algorithm
+21
+
+SCAN Scheduling
+· Scan back and forth
+Suppose the head is moving from 53 to 0
+
+14 37 53 65 67 0
+
+98 122 124
+
+183
+
+Platter
+
+Platter
+
+98
+
+183
+
+37
+
+122
+
+199
+
+14
+
+124
+
+65
+
+67 Request Queue
+
+22
+
+SCAN Scheduling
+· Scheduling diagram
+
+Any problem? Assume a uniform request distribution The heaviest density of requests is at the other end of the disk They need to wait for a long time Can we do something about this?
+23
+
+C-SCAN Scheduling
+· Circular Scan back and forth
+­ A variant of SCAN: immediately return when reaches the end ­ Aim for providing a more uniform wait time
+24
+
+C-SCAN Scheduling
+· Circular scan
+
+14 37 53 65 67 0
+
+98 122 124
+
+Platter
+
+183
+Platter
+
+98
+
+183
+
+37
+
+122
+
+199
+
+14
+
+124
+
+65
+
+67 Request Queue
+
+25
+
+C-SCAN Scheduling
+· Scheduling diagram
+Unnecessary
+No need to move across the full width of the disk, but only need to reach the final request
+Improved SCAN and C-SCAN: LOOK and C-LOOK
+26
+
+C-LOOK Scheduling
+· Goes only as far as the final request
+­ Look for a request before moving
+
+14 37 53 65 67 0
+
+98 122 124
+
+183
+
+Platter
+
+Platter
+
+98
+
+183
+
+37
+
+122
+
+199
+
+14
+
+124
+
+65
+
+67 Request Queue
+
+27
+
+C-LOOK Scheduling
+· Scheduling diagram
+Look for a request before continuing to move in a given direction
+Fewer head movements than SCAN/C-SCAN
+28
+
+Summary of scheduling algorithms
+
+FCFS
+
+SSTF
+
+C-SCAN
+
+SCAN C-LOOK
+
+SSTF outperforms FCFS, but may suffer from starvation SCAN and C-SCAN perform better for heavy load systems, and they are less likely to cause starvation
+29
+
+Selection of a scheduling algorithm
+Disk Performance
+
+Number and types of requests
+
+File allocation method Large sequential I/O or small random I/O
+
+Location of directories and index blocks (metadata I/O)
+
+Implementing scheduling in OS is necessary to satisfy other constraints (e.g., priority defined by OS)
+Write disk scheduling as a separate module of the OS Can be easily replaced with different alg. (default: SSTF/LOOK).
+
+30
+
+Topics - Disk structure - Disk scheduling - Solid-state drives (SSDs) - RAID & Erasure coding
+31
+
+- Solid-state drives (SSDs) -SSD architecture -SSD operations -Flash translation layer
+32
+
+SSDs are widely used
+Advantages of flash-based SSDs: non-volatility, shock resistance, high speed and low energy consumption;
+33
+
+Flash Types
+· NAND flash and NOR flash
+­ NAND flash: denser capacity, only allow access in units of pages, faster erase operation
+­ Most SSD products are based on NAND flash
+· NAND flash: SLC and MLC
+­ SLC: each cell stores one bit
+· Longer life time, lower access latency, higher cost
+­ MLC: each cell stores two (or three) bits
+· Higher capacity
+34
+
+Flash Cell
+· Program operation can only change the value from 1 to 0 (erase operation changes the value from 0 to 1)
+­ No overwritten
+· The floating gate becomes thinner as the cell undergoes more program-erase cycles
+­ Decreasing reliability
+35
+
+Flash Package
+· Package > die/chip > plane > block > page
+Samsung K9XXG08UXM (SLC) (2 dies, 4 planes, 2048 blocks, 64 pages)
+36
+
+SSD Architecture
+· SSD components
+­ Multiple flash packages, controller, RAM
+37
+
+- Solid-state drives (SSDs) -SSD architecture -SSD operations -Flash translation layer
+38
+
+Read
+· Read: in unit of pages (4KB)
+
+page
+
+data read: 25 s register
+
+serial bus: 100 s
+
+controller
+
+39
+
+Write
+· Write: in unit of pages (4KB)
+
+page
+
+program: 200 s register
+
+serial bus: 100 s
+
+controller
+
+40
+
+Erase
+· Erase
+­ In unit of blocks (64/128 pages) ­ Change all bits to 1 ­ Much slower than read/write: 1.5ms
+· Each block can only tolerate limited number of P/E cycles
+­ SLC: 100K, MLC: 10K, TLC (several K to several hundred)
+· The number of maximum P/E cycles decreases when
+­ More bits are stored in one cell ­ The feature size of flash cell decreases (72nm, 34nm, 25nm)
+41
+
+Overwrite & Delete
+· Delete
+­ Simply mark the page as invalid
+· Overwrite/update
+­ Does not support in-place overwrite ­ Data can only be programmed to clean pages
+42
+
+Software layer in controller
+· How to further improve write performance?
+­ Address mapping is needed
+
+· Page states
+­ Garbage collection is also necessary
+erase
+
+free/clean write
+
+invalid
+
+update
+
+valid
+
+43
+
+- Solid-state drives (SSDs) -SSD architecture -SSD operations -Flash translation layer -
+44
+
+Flash Translation Layer
+· Three functionalities
+­ Address mapping ­ Garbage collection ­ Wear-leveling
+45
+
+Address Mapping
+· Sector mapping · Block mapping · Hybrid mapping · Log-structured mapping
+46
+
+Sector Mapping
+Mapping table is large: requires a large amount of RAM
+47
+
+Block Mapping
+· The logical sector offset is the same with the physical sector offset
+Smaller mapping table If the FS issues writes with identical lsn, many erases
+48
+
+Hybrid Mapping
+· First use block mapping, then use sector mapping in each block
+Small mapping table Avoid a lot of erase operations Longer time to identify the location of a page
+49
+
+Log-structured Mapping
+
+Log blocks
+
+Data blocks
+
+lbn 0 1 2 3 0 4 8 12 1 5 9 13 2 6 10 14 3 7 11 15
+pbn 0 2 1 5
+05 09 5 10 3 pbn 4 3
+In Flash
+
+Data blocks: block mapping Log blocks: sector mapping
+
+(lbn, pbn)
+(0,0) (1,2) (2,1) (3,5)
+BMT
+
+(lsn, (pbn, off)) SMT
+
+In RAM
+50
+
+Log-structured Mapping
+
+Data blocks
+
+lbn 0 1 2 3 0 4 8 12 1 5 9 13 2 6 10 14 3 7 11 15
+pbn 0 2 1 5
+
+Data blocks: block mapping Log blocks: sector mapping
+(lsn, (pbn, off))
+
+(lbn, pbn)
+
+(0, (4,0))
+
+Log blocks
+
+0' 5 09 5 10
+
+Multiple variants
+
+(0,0) (1,2) (2,1)
+
+(3,5)
+
+3
+
+pbn 4 3
+
+BMT
+
+SMT
+
+In Flash
+
+In RAM
+51
+
+Short summary
+· The performance of address mapping is workload dependent
+­ Block mapping is suitable for sequential workloads ­ Sector mapping is suitable for random workloads ­ Log-structured mapping is suitable for workloads
+with large sequential and small random requests
+· Tradeoff exists
+52
+
+Garbage Collection
+
+· Due to the existence of invalid pages, GC must
+
+be called to reclaim storage
+
+­ Choose a candidate block
+
+­ Write valid pages to another free block
+
+­ Erase the original block
+
+0
+
+0
+
+1
+
+2
+
+2
+
+3
+
+53
+
+Design Issues of GC Algorithms
+· Tradeoff in GC design
+­ Efficiency: minimize writes ­ Wear-leveling: erase every block as even as possible ­ Tradeoff ­ GC is considered together with wear-leveling
+· Algorithms
+­ Greedy, random, and their variants ­ Hot/cold identification
+54
+
+Other Technologies
+· 3D NAND flash
+· Non-volatile memory (NVRAM)
+­ PCM, STTRAM, ReRAM, etc... ­ Byte-addressable and non-volatile ­ 3D XPoint
+55
+
+Flash Technology Trend
+56
+
+Topics - Disk structure - Disk scheduling - Solid-state drives (SSDs) - RAID & Erasure coding
+57
+
+RAID Motivation
+Disks are slow
+Performance
+
+Reliability
+One disk failure incurs data loss
+
+Cost
+Fast and reliable disks are expensive
+58
+
+RAID Introduction
+RAID: Redundant Array of Inexpensive (independent) Disks
+ In the past  Combine small and cheap disks as a cost-effective alternative to large and expensive disks
+ Nowadays  Higher performance  Higher reliability via redundant data  Larger storage capacity
+ Many different levels of RAID systems  Different levels of redundancy, capacity, cost...
+59
+
+RAID 0
+· Block-level striping, no redundancy · Provides higher data-transfer rate · Does not improve reliability. Once a disk fails, data loss
+may happen (MTTF: mean time to failure)
+60
+
+RAID 1
+· How to improve reliability?
+· Data mirroring (RAID1)  Two copies of the data are held on two physical disks, and the data is always identical.  Replication
+· High storage cost  Twice as many disks are required to store the same data when compared to RAID 0.  Even worse storage efficiency with more copies
+61
+
+Combinations
+
+· RAID 0 provides reliability and RAID 1 provides reliability
+· RAID 0+1 (RAID01)  First data striping  Then data mirroring
+
+Same storage cost as RAID 1
+62
+
+Combinations
+· RAID 0 provides reliability and RAID 1 provides reliability
+· RAID 0+1 (RAID01)  First data striping  Then data mirroring
+· RAID 1+0 (RAID10)  First data mirroring  Then data striping
+
+Same storage cost
+63
+
+RAID01 vs RAID10
+Both suffer from high storage cost
+64
+
+RAID 4
+· Balance the tradeoff between reliability and storage cost? · Redundancy with parities
+· Parity generation: Each parity block is the XOR value of the corresponding data disks
+· Block-level data striping · Data and parity blocks are distributed across disks · Dedicated parity disk
+· Any problem?
+
+ = 123
+65
+
+How to update data
+
+· Suppose A1 will be updated to A1' · Both A1 and Ap need to be updated · Read-modify-write (RMW)
+
+RMW:  = 11
+ = 12311 = 231
+
+66
+
+How to update data
+
+· Suppose A1 will be updated to A1' · Both A1 and Ap need to be updated · Read-modify-write (RMW)
+· How about updating both A1 and A2 simultaneously? · RMW? · Read-reconstruct-write (RRW)
+· Selection of RMW/RRW
+
+RRW:  = 312
+Both RMW and RRW incur extra reads and writes
+
+67
+
+Problems of RAID 4
+
+· Problems of RAID 4
+· Disk bandwidth are not fully utilized · Parity disk will not be accessed under normal mode
+· Parity disk may become the bottleneck · E.g., updating A1, B2, C3
+
+Read: A1, B2, C3, Ap, Bp, Cp Write: A1' B2', C3', Ap', Bp', Cp'
+
+68
+
+RAID 5
+
+· Similar to RAID 4 · One parity per stripe
+· Key difference · Uniform parity distribution
+· RAID 5 is an ideal combination of · good performance · good fault tolerance · high capacity · storage efficiency
+
+...
+
+ = 1234
+ = 1234
+Parity update overhead still exist
+69
+
+RAID 6
+
+· How to tolerate more disk failures?
+· RAID-6 protects against two disk failures by maintaining two parities
+· Encoding/decoding operations:  Based on Galois field
+
+ = 1234  = 01122334
+Parity update overhead becomes larger
+70
+
+Parity Update Overhead
+· RAID provides device-level fault tolerance
+­ Each stripe contains data and parity
+
+· Limitation: Parity updates
+
+­ Update data -> update parity
+· Update 1 to 1 · RMW: 0 = 011 · RRW: P0 = D012
+­ Extra I/Os and GC
+· SSD RAID
+
+Parity chunks:
+0 = 012 1 = 345
+
+­ Parity update influences both performance and endurance
+
+71
+
+Design tradeoff
+· Design trade-off in SSD RAID arrays
+­ RAID improves reliability ­ Parity updates incur extra I/Os and GC operations
+· Degrade performance and endurance
+How to address the parity update overhead?
+72
+
+Parity Logging
+· Original Parity logging
+­ Incoming reqs: {0, 0, 0 },{1, 1, 1 }, {0, 0, 1}
+· Drawbacks
+­ Pre-read: Extra reads ­ Per-stripe basis: Extra log chunks; Partial parallelism
+73
+
+EPLOG
+Our solution: New RAID Design via Elastic Parity Logging (EPLOG)
+No pre-read Full parallelism
+(Elastic)
+74
+
+Tolerate any number of failures?
+ Erasure codes
+­ General-fault tolerant: Cauchy Reed-Solomon (CRS)
+ Generate m code blocks from k data blocks, so as to tolerate any m disk failures
+
+A
+
+B
+
+A
+
+B
+
+A+B
+
+A+2B
+
+75
+
+XOR-based Codes
+
+ 2-fault tolerant: RDP, EVENODD, X-Code  An RDP code example with 6 disks
+
+Disk Disk Disk Disk
+
+0
+
+1
+
+2
+
+3
+
+Disk 4
+
+Disk 5
+
+d0,0 d0,1 d0,2 d0,3
+
+
+
+d1,0 d1,1 d1,2 d1,3
+
+
+
+d2,0 d2,1 d2,2 d2,3
+
+
+
+d3,0 d3,1 d3,2 d3,3
+
+
+
+d0,4
+
+d0,5
+
+d1,4 d2,4 d3,4
+
+   
+
+d1,5 d2,5 d3,5
+
+76
+
+Summary on Erasure Codes
+ The motivation to introduce erasure codes in large-scale storage systems
+The need to reduce the tremendous cost of storage
+ In practice, erasure codes have seen widely deployment in past decades
+· Google File System [Ford, OSDI'10] · Windows Azure Storage [Huang, ATC'12] · Facebook [Borthakur, Hadoop User Group Meeting 2010]
+·...
+· Research topicswide stripes, EC in disaggregated mem...
+77
+
+Summary of Ch8
+Disk Structure Disk Scheduling
+
+ Cylinder, Track, Sector: CLV, CAV  Access time  FCFS, SSTF, SCAN/C-SCAN, LOOK/C-LOOK
+
+SSD Structure SSD Features/Issues
+
+ Structure and features  Operations (read/write/erase/GC)
+
+RAID Erasure Coding
+
+ RAID structures (RAID0, 1, 4, 5, 6)  Erasure coded storage
+78
+
+

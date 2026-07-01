@@ -1,0 +1,3098 @@
+Operating Systems
+
+Prof. Yongkun Li
+- 
+http://staff.ustc.edu.cn/~ykli
+
+                                                          Ch5
+                                                      -Part 2
+                                 Process Synchronization
+
+                                                                                                                                                                          1
+Topics in Process Synchronization
+
+   Cooperating Processes                      Idea: How to achieve
+ concurrent accesses suffer
+                                              Define critical section
+     from race condition
+                                                How to implement
+                         Solution
+                                       Four requirements
+   Process Sychronization              Software-based proposals
+Guarantee mutual exclusion
+                                            Disabling interrupts
+                         Application        strict alternation
+                                            peterson's solution
+       Semaphore Usage                      mutex lock
+         Avoid deadlock                     Semaphore (best choice)
+
+                                                 Classic problems
+
+                                       Producer-consumer problem
+                                       Dining philosopher problem
+                                       Reader-writer problem
+
+                                                                                                                     2
+- Mutual exclusion
+         - what & how to achieve?
+
+               P                   P
+
+How to have                        P
+   peace?
+                                           3
+Mutual Exclusion
+
+           Shared memory               Two processes playing with the same
+                                       shared memory is dangerous.
+  add 10;  minus 10;
+                                       We will face the curse - race condition.
+Process A     Process B
+
+ The solution can be simple:                      Shared memory
+
+   When I'm playing with the shared      add 10;  minus 10;
+   memory, no one could touch it.
+                                       Process A     Process B
+This is called mutual exclusion.
+A set of processes would not have the
+problem of race condition if mutual
+exclusion is guaranteed.
+
+                                                                                 4
+How to realize mutual exclusion?
+
+· Kernel
+
+   ­ Preemptive kernels and nonpreemptive kernels
+
+         · Allows (not allow) a process to be preempted while it is
+           running in kernel mode
+
+   ­ A nonpreemptive kernel is essentially free from race
+      conditions on kernel data structures, and also easy to
+      design (especially for SMP architecture)
+
+   ­ Why would anyone favor a preemptive kernel
+
+         · More responsive
+         · More suitable for real-time programming
+
+                                                                                                                                                                               5
+Mutual Exclusion                                Program code
+                                                of process n
+· More generally, how to realize?
+                                                    Code for
+          Program code                           manipulating
+          of process 1                           shared object
+
+   Code for    Shared Object (manipulated by n        ......
+manipulating   processes)
+shared object   Changing common variables
+                Updating a table
+     ......     Writing a file
+               ...
+
+                                                    critical section
+
+Solution: To guarantee that when one process is executing in its critical
+section, no other process is allowed execute in its critical section.
+
+                                                                                                                                                                             6
+Critical Section ­ General Structure
+
+     To guarantee that when one process is executing in its critical
+     section, no other process is allowed execute in its critical section.
+
+Program code                 Declaring the start of the critical section.
+
+      Section entry          As if telling other processes that:
+           critical section    "I start accessing the shared object."
+                     ......
+                    ......            Critical sections is the code segment
+                                      that is accessing the shared object.
+
+                             Reading  Shared Object
+                             Writing
+
+  Section exit                        Declaring the end of the critical section.
+                                      As if telling other processes that:
+Reminder section
+                                        "I finish accessing the shared object."
+
+                                                                                                                              7
+Critical Section ­ Example
+
+Need a section entry here  Critical Section           Need a section entry here
+                                            2.1
+2.1 load memory X to                             load memory X to
+        register A;                              register A;
+
+2.2 add 10 to register A;   2.2 minus 10 from register A;
+
+2.3 write register A to     2.3 write register A to
+        memory X;                   memory X;
+
+Need a section exit here                         Need a section exit here
+
+Process A  Important concept here.                     Process B
+
+           Both regions are called critical sections,                           8
+           yet they can be different.
+Summary...for the content so far...
+
+· Race condition is a problem.
+
+   ­ It makes a concurrent program producing unpredictable
+      results if you are using shared objects as the
+      communication medium.
+
+   ­ The outcome of the computation totally depends on the
+      execution sequences of the processes involved.
+
+· Mutual exclusion is a requirement.
+
+   ­ If it could be achieved, then the problem of the race
+      condition would be gone.
+
+   ­ Mutual exclusion hinders the performance of parallel
+      computations.
+
+                                                                                                                                                                               9
+Summary...for the content so far...
+
+· Defining critical sections is a solution.
+
+   ­ They are code segments that access shared objects.
+
+   ­ Critical section must be as tight as possible.
+
+         · Well, you can declare the entire code of a program to be a big
+           critical section.
+
+         · But, the program will be a very high chance to block other
+           processes or to be blocked by other processes.
+
+   ­ Note that one critical section can be designed for
+      accessing more than one shared objects.
+
+                                                                                                                                                                             10
+Summary...for the content so far...
+
+· Implementing section entry and exit is a challenge.
+
+   ­ The entry and the exit are the core parts that guarantee
+      mutual exclusion, but not the critical section.
+
+   ­ Unless they are correctly implemented, race condition
+      would appear.
+
+                                                                                                                                                                             11
+- Mutual exclusion:
+         - how to achieve?
+         - how to implement?
+             (section entry and exit)
+
+               P                       P
+
+How to have                            P
+   peace?
+                                             12
+Entry and exit implementation - requirements
+
+· Requirement #1: Mutual Exclusion. No two processes
+  could be simultaneously inside their critical sections.
+
+        Implication: when one process is inside its critical section, any attempts to go
+        inside the critical sections by other processes are not allowed.
+
+· Requirement #2. Each process is executing at a nonzero
+  speed, but no assumptions should be made about the
+  relative speed of the processes and the number of CPUs.
+
+        Implication: the solution cannot depend on the time spent inside the critical
+        section, and the solution cannot assume the number of CPUs in the system.
+
+                                                                                                                                                                             13
+Entry and exit implementation - requirements
+
+· Requirement #3: progress. No process running outside its
+  critical section should block other processes.
+
+        Implication: Only processes that are not executing in their reminder sections can
+        participate in deciding which will enter its critical section.
+
+· Requirement #4: Bounded waiting. No process would have
+  to wait forever in order to enter its critical section.
+
+        Implication: There exists a bound or limit on the number of times that other
+        processes are allowed to enter their critical sections after a process has made a
+        request to enter its critical section (no processes should be starved to death).
+
+                                                                                                                                                                             14
+A typical mutual exclusion scenario
+
+Remember, it is always the entry blocks other   Keys
+    processes, but not the critical section.
+                                                        Critical section
+Process A                      BLOCKED                  entry
+Process B
+                                                        Inside Critical
+                                                        section
+
+                                                        Critical section
+                                                        exit
+
+                                                        Shared object
+                                                        (if any)
+
+                                               We will be using this
+                                               coloring scheme
+                                               throughout this part.
+
+B tries to enter its critical           A leaves its critical section
+section but A is in its                 and B resumes execution
+critical section.                       accordingly.
+
+                                                                                                                 15
+Mutual Exclusion Implementation
+
+· Challenges of Implementing section entry & exit
+
+   ­ Both operations must be atomic
+   ­ Also need to satisfy the above requirements
+   ­ Performance consideration
+
+· Hardware solution
+
+   ­ Rely on atomic instructions
+   ­ test_and_set()
+   ­ compare_and_swap
+
+                                                                                                                                                                             16
+Example: test_and_set()
+
+· Definition
+
+· Mutual exclusion
+  implementation
+
+                                                                                                                                                                             17
+Example: compare_and_swap()
+
+· Definition
+
+· Mutual exclusion
+  implementation
+
+   How to satisfy
+   bounded waiting?
+
+                                                                                                                                                                             18
+Enhanced version
+
+                  lock is initialized as false
+
+                                                19
+Proposal #1 ­ disabling interrupt.
+
+· Method                                                    Program Code
+                                                             Interrupt disabled
+     ­ Similar idea as nonpreemptive kernels                     Critical Section
+     ­ To disable context switching when the process is
+                                                             Interrupt enabled
+        inside the critical section.
+
+· Effect
+
+     ­ When a process is in its critical section, no other
+        processes could be able to run.
+
+· Implementation
+
+     ­ A new system call should be provided.
+
+· Correctness?
+
+     ­ Correct, but it is not an attractive solution.
+     ­ Not as feasible in a multiprocessor environment
+     ­ Performance issue (may sacrifice concurrency)
+
+                                                                                   20
+Proposal #2: Mutex Locks
+
+· Idea
+
+   ­ A process must acquire the lock before entering a
+      critical section, and release the lock when it exits the
+      critical section
+
+   ­ Using a new shared object to detect the status of other
+      processes, and "lock" the shared object
+
+              Shared object: "available" (lock)
+
+1 acquire(){
+
+2   while(!available)     1 release(){
+
+3   ; /* busy waiting */  2   available = true;
+
+4   available = false;    3}
+
+5}
+
+                                                                21
+Proposal #2: Mutex Locks
+
+· Implementation                                Note that: all processes run the
+                                                      following same code.
+    ­ Calls to acquire and release locks
+      must be performed atomically             Program Code
+
+    ­ Often use hardware instructions
+
+                                               acquire();
+
+· Issue
+
+­ Busy waiting: Waste CPU resource             Critical Section
+
+    · Spinlock
+
+· Applications                                 release();
+
+    ­ Multiprocessor system
+
+         · When locks are expected to be held
+            for short times
+
+                                                                                  22
+Other software-based solutions
+
+· Aim
+
+   ­ To decide which process could go into its critical section
+
+Program code      Program code
+of process 1      of process n
+
+Section entry     Section entry
+
+Critical section  Critical section
+
+     ......            ......
+
+Section exit                    Section exit
+
+· Key Issue
+
+   ­ Detect the status of processes (section entry)
+
+         · Need other shared variables
+
+                                                     23
+Proposal #3: Strict alternation
+
+· Method
+
+    ­ Using a new shared object to detect the status of other
+      processes
+
+             Shared object "turn"  initial Value = 0
+
+1 while (TRUE) {                          1 while (TRUE) {
+
+2 while( turn != 0 )               Entry  2 while( turn != 1 )
+                                   Exit
+3  ; /* busy waiting */                   3  ; /* busy waiting */
+
+4 critical_section();                     4 critical_section();
+
+5 turn = 1;                               5 turn = 0;
+
+6 non_critical_section();                 6 non_critical_section();
+7}                                        7}
+
+   Allow to enter when  Process 0                                      Process1
+           turn == 0
+                                            Allow to enter when
+                                                    turn == 1
+
+                                                                                 24
+Proposal #3: Strict alternation
+
+             turn = 0                    turn = 0
+
+Process 0                                                   The order of executing
+Process 1                                                   the critical section is
+                                                            alternating.
+
+                       turn = 1
+
+             Shared object "turn"        initial Value = 0
+
+1 while (TRUE) {                                   1 while (TRUE) {
+
+2 while( turn != 0 )                               2 while( turn != 1 )
+
+3  ; /* busy waiting */                            3  ; /* busy waiting */
+
+4 critical_section();                              4 critical_section();
+
+5 turn = 1;                                        5 turn = 0;
+
+6 non_critical_section();                          6 non_critical_section();
+7}                                                 7}
+
+                              Process 0                                         Process1
+
+                                                                                          25
+Proposal #3: Strict alternation - Cons
+
+· Strict alternation seems good, yet, it is inefficient.
+
+   ­ Busy waiting wastes CPU resources.
+
+· In addition, the alternating order is too strict.
+
+   ­ What if Process 0 wants to enter the critical section
+      twice in a row? NO WAY!
+
+   ­ Violate any requirement?
+
+                   Requirement #3. No process running outside its critical
+                   section should block other processes.
+
+                                                                                                                                                                             26
+Proposal #4: Peterson's solution
+
+· How to improve the strict alternation proposal?
+
+· The Peterson's solution:
+
+   ­ Processes would act as a gentleman: if you want to
+      enter, I'll let you first
+
+   ­ No alternation is there
+   ­ Share two data items
+
+         · int turn; //whose turn to enter its critical section
+         · Boolean interested[2]; //if a process wants to enter
+
+                                                                                                                                                                             27
+Proposal #4: Peterson's solution
+
+                                                                                              Shared object: "turn" &
+                                                                                                    "interested[2]"
+
+1 int turn;                    /* who can enter critical section */
+
+2 int interested[2] = {FALSE,FALSE}; /* wants to enter critical section*/
+
+3                                                             Entry
+4 void enter_region( int process ) { /* process is 0 or 1 */
+
+5 int other;                   /* number of the other process */
+
+6 other = 1-process;           /* other is 1 or 0 */
+
+7 interested[process] = TRUE;  /* want to enter critical section */
+
+8 turn = other;
+
+9 while ( turn == other &&
+
+             interested[other] == TRUE )
+
+10    ; /* busy waiting */
+
+11 }
+
+12
+
+13 void leave_region( int process ) { /* process: who is leaving */
+
+14 interested[process] = FALSE; /* I just left critical region */
+
+15 }                                                          Exit
+
+                                                                                                                       28
+Proposal #4: Peterson's solution
+
+1 int turn;                               Line 8 akes the other one the
+                                          turn to run.
+2 int interested[2] = {FALSE,FALSE};      Of course, the process is
+                                          willing to wait when she
+3                                         wants to enter the critical
+                                          section.
+4 void enter_region( int process ) {
+                                           "I'm a gentleman!"
+5 int other;                               The process always let
+                                           another process to enter the
+6 other = 1-process;                       critical region first although
+                                           she wants to enter too.
+7 interested[process] = TRUE;
+                                                                                                         29
+8 turn = other;
+
+9 while ( turn == other &&
+
+             interested[other] == TRUE )
+
+10    ; /* busy waiting */
+
+11 }
+
+12
+
+13 void leave_region( int process ) {
+
+14 interested[process] = FALSE;
+
+15 }
+Proposal #4: Peterson's solution
+
+1 int turn;                               Process 0            Process 1
+
+2 int interested[2] = {FALSE,FALSE};      enter_region(): 4-8  turn = 1;
+
+3                                         Context Switching
+
+4 void enter_region( int process ) {      turn = 0;            enter_region(): 4-8
+
+5 int other;                              Context Switching
+
+6 other = 1-process;                      enter_region(): 9         turn = 0;
+                                           Critical Section    interested[1] = T;
+7 interested[process] = TRUE;
+
+8 turn = other;                           Context Switching
+
+9 while ( turn == other &&                                     Busy waiting
+
+             interested[other] == TRUE )  Context Switching
+
+10    ; /* busy waiting */                leave_region()       interested[0] = F;
+
+11 }                                      Context Switching
+
+12                                                             Critical Section
+
+13 void leave_region( int process ) {     and the story goes on...
+
+14 interested[process] = FALSE;           Can you show that the
+                                          requirements are satisfied?
+15 }
+
+                                                                                    30
+Proposal #4: Peterson's solution
+
+1 int turn;                               Process 0            Process 1
+
+2 int interested[2] = {FALSE,FALSE};      enter_region(): 4-7
+
+3                                         Context Switching
+
+4 void enter_region( int process ) {                           enter_region(): 4-7
+
+5 int other;                              Context Switching
+
+6 other = 1-process;                      enter_region(): 8-9
+
+7 interested[process] = TRUE;             Context Switching
+
+8 turn = other;
+
+9 while ( turn == other &&
+
+             interested[other] == TRUE )  Can you complete the flow?
+                                          (what is the difference?)
+10    ; /* busy waiting */
+                                          Can both processes progress?
+11 }
+
+12
+
+13 void leave_region( int process ) {
+
+14 interested[process] = FALSE;
+
+15 }
+
+                                                                                    31
+Proposal #4: Peterson's solution ­ issues
+
+· Busy waiting has its own problem...
+
+   ­ An apparent problem: wasting CPU time.
+   ­ A hidden, serious problem: priority inversion problem.
+
+         · A low priority process is inside the critical region, but ...
+         · A high priority process wants to enter the critical region.
+         · Then, the high priority process will perform busy waiting for a
+
+           long time or even forever.
+
+               High priority process
+               created with preemption
+
+Low-priority                            Not scheduled for a long time.
+process
+                                              Because it has a higher
+High-priority                                 priority, it will sit on the CPU
+process                                       doing useless things.
+
+                                                                                32
+Story so far...
+
+                            Critical Section Problem
+
+Disabling    Strict       Peterson's                  Mutex
+                           solution                    lock
+interrupts alternation
+
+ Efficiency    Violating   Priority                      Atomicity
+Concurrency  requirement  inversion                   implementation
+
+                          Busy Waiting
+
+             Use other shared variables to detect process status
+
+                                                                      33
+Final proposal: Semaphore
+
+· In real life, semaphore is a flag signaling system.
+
+   ­ It tells a train driver (or a plane pilot) when to stop and
+      when to proceed.
+
+· When it comes to programming...  source: wikipedia.
+
+   ­ A semaphore is a data type.
+
+­ You can imagine that it is an integer (but it is certainly
+  not an integer when it comes to real implementation).
+
+                                                                  34
+Final proposal: Semaphore
+
+· Semaphore is a data type (additional shared object)
+
+    ­ Denote the status or the number of resources
+    ­ Two types
+
+         · Binary semaphore: 0 or 1 (similar to mutex lock)
+         · Counting semaphore: control finite number of resources
+
+· Accessed through two standard atomic operations
+
+    ­ down(): originally termed P (from Dutch proberen, "to
+      test"), wait() in textbook
+
+         · Decrementing the count
+
+    ­ up(): originally termed V (from verhogen, "to increment"),
+      signal() in textbook
+
+         · Incrementing the count
+
+                                                                                                                                                                             35
+Final proposal: Semaphore
+
+· Idea
+
+        Initialize the semaphore to the number of resource instances
+
+         process 1         Shared      process n
+                          resource
+        Section entry     instances  Section entry
+
+        Critical section             Critical section
+
+             ......                       ......
+         Section exit                 Section exit
+
+                          Semaphore
+                              S=5
+
+                                                                                                                      36
+Final proposal: Semaphore
+
+· Idea
+
+        Wish to use a resource, perform down() to decrement the count
+
+         process 1        Acquire    Shared     process n
+        Section entry     resource  resource   Section entry
+                          down()    instances
+
+        Critical section                       Critical section
+
+             ......                                 ......
+
+        Section exit                           Section exit
+
+                                    Semaphore
+                                        S=4
+
+                                                                                                                                37
+Final proposal: Semaphore
+
+· Idea
+
+        Release a resource, perform up() to increment the count
+
+         process 1                   Shared      process n
+                                    resource
+        Section entry               instances  Section entry
+
+        Critical section  Release              Critical section
+                          resource
+             ......                                 ......
+         Section exit       up()                Section exit
+
+                                    Semaphore
+                                        S=5
+
+                                                                                                                                38
+Final proposal: Semaphore
+
+· Idea
+
+        When the count goes to 0, block the processes that wish to use
+
+         process 1        Acquire    Shared    Acquire    process n
+        Section entry     resource  resource   resource  Section entry
+                          down()    instances  down()
+
+        Critical section                                 Critical section
+
+             ......                                           ......
+
+        Section exit                                     Section exit
+
+                                    Semaphore
+                                        S=0
+
+                                                                                                                                39
+Semaphore ­ Simple Implementation
+
+    Data Type definition
+   typedef int semaphore;
+
+   Section Entry: down()     Counting Semaphore: initialized to
+                             be the number of resources available
+1 void down(semaphore *s) {
+                                       Section Exit: up()
+2                             1 void up(semaphore *s) {
+                              2
+3     while ( *s == 0 ) {     3
+                              4
+4                             5 *s = *s + 1;
+                              6
+5        ;//busy waiting      7}
+
+6                                                                                                          40
+
+7     }
+
+8     *s = *s ­ 1;
+
+9
+
+10 }
+Semaphore ­ Address busy waiting
+
+    Data Type definition     First issue: Busy waiting
+   typedef int semaphore;
+                             Solution: block the process instead of
+                             busy waiting (place the process into a
+                             waiting queue)
+
+   Section Entry: down()
+
+1 void down(semaphore *s) {      Section Exit: up()
+
+2
+
+3     while ( *s == 0 ) {    1 void up(semaphore *s) {
+
+4                            2
+
+5        special_sleep();    3 if ( *s == 0 )
+
+6                            4   special_wakeup();
+
+7     }                      5 *s = *s + 1;
+
+8     *s = *s ­ 1;           6
+
+9                            7}
+
+10 }
+
+                                                                     41
+Semaphore ­ Address busy waiting
+
+ Data Type definition           First issue: Busy waiting
+typedef int semaphore;
+                                Solution: block the process instead of
+                                busy waiting (place the process into a
+                                waiting queue)
+
+typedef struct{                                 Note
+
+        int value;              Implementation: The waiting queue
+        struct process * list;  may be associated with the
+                                semaphore, so a semaphore is not
+}semaphore;                     just an integer
+
+                                                                        42
+Semaphore ­ Atomicity
+
+    Data Type definition     Second issue: Atomicity (both
+   typedef int semaphore;    operations must be atomic)
+
+                             Solution: Disabling interrupts
+
+   Section Entry: down()
+
+1 void down(semaphore *s) {      Section Exit: up()
+
+2
+
+3     while ( *s == 0 ) {    1 void up(semaphore *s) {
+
+4                            2
+
+5        special_sleep();    3 if ( *s == 0 )
+
+6                            4   special_wakeup();
+
+7     }                      5 *s = *s + 1;
+
+8     *s = *s ­ 1;           6
+
+9                            7}
+
+10 }
+
+                                                             43
+Semaphore ­ Atomicity
+
+    Data Type definition       Second issue: Atomicity (both
+   typedef int semaphore;      operations must be atomic)
+
+                               Solution: Disabling interrupts
+
+   Section Entry: down()       Also, only one process can invoke
+                               "disable_interrupt()". Later
+1 void down(semaphore *s) {    processes would be blocked until
+                               "enable_interrupt()" is called.
+2     disable_interrupt();
+                                         Section Exit: up()
+
+3     while ( *s == 0 ) {      1 void up(semaphore *s) {
+
+4        enable_interrupt();   2 disable_interrupt();
+
+5        special_sleep();      3 if ( *s == 0 )
+
+6        disable_interrupt();  4   special_wakeup();
+
+7     }                        5 *s = *s + 1;
+
+8     *s = *s ­ 1;             6 enable_interrupt();
+
+9     enable_interrupt();      7}
+
+10 }
+
+                                                                  44
+Semaphore ­ The code
+
+    Data Type definition       Why need these two statements?
+   typedef int semaphore;
+                               Disabling interrupts may sacrifice
+   Section Entry: down()       concurrency, so it is essential to keep the
+                               critical section as short as possible
+
+1 void down(semaphore *s) {        Section Exit: up()
+
+2     disable_interrupt();
+
+3     while ( *s == 0 ) {      1 void up(semaphore *s) {
+
+4        enable_interrupt();   2 disable_interrupt();
+
+5        special_sleep();      3 if ( *s == 0 )
+
+6        disable_interrupt();  4   special_wakeup();
+
+7     }                        5 *s = *s + 1;
+
+8     *s = *s ­ 1;             6 enable_interrupt();
+
+9     enable_interrupt();      7}
+
+10 }
+
+                                                                            45
+Semaphore ­ details
+
+      Process 1234          Suppose that process 1234 is willing to access
+        down(X)             the shared resource (enter its critical section),
+                            but no resource is available
+
+   Section Entry: down()
+
+1 void down(semaphore *s) {
+
+2     disable_interrupt();       Semaphore X
+                                    Value = 0
+3     while ( *s == 0 ) {
+                               1234
+4        enable_interrupt();
+                                 Waiting List
+5        special_sleep();
+
+6        disable_interrupt();
+
+7     }
+
+8     *s = *s ­ 1;
+
+9     enable_interrupt();
+
+10 }
+
+                                                                               46
+Semaphore ­ details
+
+   Process 1357            Process 1234                   Process 2468
+       up(X)
+      Section Exit: up()                    wakeup                wakeup
+
+1 void up(semaphore *s) {
+
+2 disable_interrupt();                              Semaphore X
+                                                       Value = 10
+3 if ( *s == 0 )
+
+4   special_wakeup();
+
+5 *s = *s + 1;                                      1234  2468
+
+6 enable_interrupt();
+
+7}
+
+                                                    Waiting List
+
+                                                                          47
+Semaphore ­ details
+
+                                     Process 1234     Process 2468
+
+                                                      down(X)
+
+Note that it is impossible for two                 Section Entry: down()
+blocked processes to get out of the
+down() simultaneously.               1 void down(semaphore *s) {
+
+Why?                                 2             disable_interrupt();
+
+Only one process can invoke          3             while ( *s == 0 ) {
+disable_interrupt()
+                                     4                enable_interrupt();
+Only one process can manipulate
+this shared variable                 5                special_sleep();
+
+                                     6 here disable_interrupt();
+
+                                     7             }
+
+                                     8             *s = *s ­ 1;
+
+                                     9             enable_interrupt();
+
+                                     10 }
+
+                                                                           48
+Semaphore ­ in action
+
+· Add them together...
+
+  Either one of the processes can                       semaphore *s;
+  enter the critical section when
+  the first process calls "up(s)".                      *s = 1;     /* initial value */
+
+s=1                                                     1 while(TRUE) {  entry
+                    s=1
+                                                        2   down(s);
+                                      s=1
+
+                                                   s=1
+
+                                                        3   critical_section();
+
+                                                        4   up(s);
+
+                                                        5}               exit
+
+s=0  s=0  s=0
+
+                                                                                         49
+Summary...on semaphore
+
+· More on semaphore...it demonstrates an important
+  kind of operations ­ atomic operations.
+
+            Definition of atomic operation
+            - Either none of the instructions of an atomic operation were completed, or
+            - All instructions of an atomic operation are completed.
+
+· In other words, the entire up() and down() are
+  indivisible.
+
+   ­ If it returns, the change must have been made;
+   ­ If it is aborted, no change would be made.
+
+                                                                                                                                                                             50
+Semaphore Usage
+
+· Semaphore can be used for
+
+   ­ Mutual exclusion
+
+         · Binary semaphore
+
+   ­ Counting
+
+         · Counting semaphore
+
+   ­ Process synchronization
+
+         · Counting semaphore may be needed
+         · Multiple semaphores may be used
+
+                                                                                                                                                                             51
+Summary...on critical section problem
+
+· Race condition
+
+   ­ Mutual exclusion: Critical section
+
+· What happened is just the implementation of
+  mutual exclusion (section entry and section exit).
+
+                                                                     Comments
+
+     Disabling interrupts Time consuming for multiprocessor systems, sacrifices concurrency.
+
+Strict alternation   Not a good one, busy waiting & violating one requirement.
+
+Peterson's solution  Busy waiting & has a potential "priority inversion problem".
+
+Mutex lock           Busy waiting, often relies on hardware instructions.
+Semaphore                                GENERAL CHOICE.
+
+                                                                                                                               52
+Summary...on critical section problem
+
+· How to do process synchronization?
+
+   ­ W/ semaphore
+
+         · Mutual exclusion + coordination (multiple semaphores)
+         · Careless design may lead to other issues
+
+                ­ EXP: swap the PV ops, use P w/o V
+                ­ Monitor
+
+   ­ Liveless (be able to make progress)
+
+         · failure cases: infinite waiting & deadlock
+
+   ­ Performance: Lock-free alg. w/ CAS vs. mutex lock
+
+· Next: use semaphore to solve classic IPC problems
+
+   ­ Deadlock
+
+                                                                                                                                                                             53
+The Deadlock Problem
+
+Classic IPC problems
+      - Producer-consumer problem
+      - Dining philosopher problem
+      - Reader-writer problem
+
+                                                                                                              P
+
+                                        P
+
+                      Let's teach them     P
+
+                      not to fight.
+
+                                                                                                                 54
+Deadlock Example
+
+· Problems when using semaphore
+
+Process P0        Process P1
+
+ down(X)           down(Y)
+ down(Y)           down(X)
+
+Critical          Critical                          Deadlock
+Section           Section
+
+   ......            ......
+
+up(X)             up(Y)
+up(Y)             up(X)
+
+Scenario: P0 must wait until P1 executes up(Y), P1
+must wait until P0 executes up(X)
+
+                                                              55
+Deadlock Requirements
+
+· Requirement #1: Mutual Exclusion.
+
+   ­ Only one process at a time can use a resource
+
+· Requirement #2. Hold and wait.
+
+   ­ A process must be holding at least one resource and
+      waiting to acquire additional resources held by other
+      processes
+
+                                                                                                                                                                             56
+Deadlock Requirements
+
+· Requirement #3: No preemption.
+
+   ­ A resource can be released only voluntarily by the
+      process holding it after that process has completed its
+      task
+
+· Requirement #4. Circular wait.
+
+   ­ There exists a set {P0, P1, ..., Pn} of waiting processes such
+      that P0 waits for P1, P1 waits for P2, ..., Pn­1 waits for Pn ,
+      Pn waits for P0
+
+                                                                                                                                                                             57
+How to Handle Deadlocks
+
+· Deadlock characterization: Deadlocks can be
+  described using resource-allocation graph
+
+   ­ Set V is partitioned into two types:
+
+         · P = {P1, P2, ..., Pn}: processes
+         · R = {R1, R2, ..., Rm}: all resource types (each type may have
+
+           multiple instances)
+
+   ­ Set E
+
+         · request edge ­ directed edge Pi  Rj Pi
+
+                                                                                                                        Rj
+
+         · assignment edge ­ directed edge Rj  Pi Pi
+
+                                                                                                                              Rj
+
+                                                                                                                                                                             58
+Examples
+
+                                                                                                                                                                             59
+How to Handle Deadlocks
+
+· Detect deadlock and recover
+
+   ­ Resource-allocation graph: detect the existence of a cycle
+
+                                                              No cycles
+                                                            No deadlock
+
+                                                          Contains a cycle
+                                                          Case 1: only one
+                                                       instance per resource
+                                                           type: deadlock
+
+                                                                                                                                                                       60
+Examples
+
+· Detect deadlock and recover
+
+   ­ What if each resource has multiple instances
+
+Deadlock  No deadlock
+
+                                                                 61
+How to Handle Deadlocks
+
+· Detect deadlock and recover
+
+­ What if each resource has multiple instances
+
+· Matrix method: four data structures
+
+     ­ Existing (total) resources ( types): (1, 2, ... , )
+     ­ Available resources: (1, 2, ... , )
+
+                            11    1   (: # of type-j resources
+­ Allocation matrix                   held by process i )
+
+1  
+
+                        11  1         (: # of type-j resources
+­ Request matrix:                     requested by process i )
+
+                        1  
+
+ Repeatedly check  s.t.   ? ( can be satisfied?)
+     Yes:  =  +  (release resources)
+     No: End (remaining processes are deadlocked)
+
+                                                                62
+How to Handle Deadlocks
+
+· Prevent/avoid deadlocks: Banker's algorithm
+
+   · Idea: check system state defined by (E, , , )
+         · Safe state: exist one running sequence to guarantee that all
+           processes' demand can be satisfied
+
+           Existing resources
+
+                Maximum demand
+
+Processes  A39  A39             A39                 A39           A39
+           B24  B44             B0 -                 B24           B24
+           C27  C27             C27                  C77           C0 -
+
+           Available: 3 Available: 1 Available: 5  Available: 0  Available: 7
+
+· Unsafe state: Not exist any sequence to guarantee the demand
+
+     ­ It is not deadlock (it can still run for some time/processes may release
+        some resources)
+
+                                                                               63
+How to Handle Deadlocks
+
+· Prevent/avoid deadlocks: Banker's algorithm
+
+­ For each request: safe (accept), unsafe (reject)
+
+           Existing resources
+             Maximum demand
+
+Processes   A16           B requests one  A16           B requests     A16
+            B05           resource        B15           one resource    B25
+            C24                           C24                           C24
+            D47                                                        D47
+           Available: 3   Accept           D47          reject        Available: 1
+                                          Available: 2
+           Initial state                                              Unsafe state
+                                          Safe state
+
+                                  Running order: C D B A
+
+           The algorithm can also be extended to the case of multiple
+           resources, but it needs to know the demand
+
+                                                                                    64
+How to Handle Deadlocks
+
+· Ignore the problem and pretend that deadlocks
+  never occur (stop functioning and restart manually)
+
+   ­ 
+   ­ Used by most operating systems, including UNIX and
+
+      windows
+   ­ Deadlocks occur infrequently, avoiding/detecting it is
+
+      expensive
+
+· A deadlock-free solution does not eliminate starvation
+
+                                                                                                                                                                             65
+The Deadlock Problem
+
+Classic IPC problems
+      - Dining philosopher problem
+      - Producer-consumer problem
+      - Reader-writer problem
+
+                                                                                                              P
+
+                                        P
+
+                      Let's teach them     P
+
+                      not to fight.
+
+                                                                                                                 66
+What are the problems?
+
+· All the IPC classical problems use semaphores to
+  fulfill the synchronization requirements.
+
+               Properties                                       Examples
+
+  Producer-    Two classes of processes: producer and consumer; FIFO buffer,
+  Consumer
+   Problem     At least one producer and one consumer.          such as pipe.
+
+    Dining     They are all running the same program;             Cross-road
+  Philosophy             At least two processes.                traffic control.
+
+   Problem       Two classes of processes: reader and writer.   Database.
+               No limit on the number of the processes of each
+Reader-Writer
+   Problem                               class.
+
+                                                                                  67
+The Deadlock Problem
+
+Classic IPC problems
+      - Dining philosopher problem
+      - Producer-consumer problem
+      - Reader-writer problem
+
+                                                                                                              P
+
+                                        P
+
+                      Let's teach them     P
+
+                      not to fight.
+
+                                                                                                                 68
+Dining philosopher ­ introduction
+
+· 5 philosophers, 5 plates of spaghetti, and
+  5 chopsticks.
+
+· The jobs of each philosopher are
+
+    ­ to think and
+    ­ to eat: They need exactly two chopsticks in
+
+      order to eat the spaghetti.
+
+· Question: how to construct a
+  synchronization protocol such that
+
+    ­ they will not result in any deadlocking
+      scenarios, and
+
+    ­ they will not be starved to death
+
+                                                                                                                                                                             69
+Dining philosopher ­ introduction
+
+Philosophers                         PrPorPcoerPcoserPscoserscosescsesss
+    Chopsticks
+                          Spaghetti  SOhSObahjSObreahejScObreadthejScObreadthejcbreadtejcredtecdt
+
+                                       Consider to have
+                                        infinite supply.
+
+                                                                                       70
+Dining philosopher ­ introduction
+
+The chopsticks are arranged in                   Philosopher i needs
+the following manner.                            Chopsticks i and ((i+1) % N);
+
+                                Philosopher 0
+
+                                Chopstick 0               Chopstick 1    Philosopher 1
+
+Philosopher 4
+
+               Chopstick 4                                Chopstick 2
+
+                                             Chopstick 3
+
+               Philosopher 3                              Philosopher 2
+
+                                                                                        71
+Dining philosopher ­ introduction                                   Thinking or
+                                                                    waiting.
+                                                     Philosopher 0
+                                                                    Eating.
+
+               Chopstick 0    Chopstick 1                           Philosopher 1
+
+Philosopher 4
+
+               Chopstick 4                 Chopstick 2
+
+                              Chopstick 3
+
+               Philosopher 3               Philosopher 2
+
+                                                                                   72
+Dining philosopher ­ introduction
+
+Two guys cannot share         Philosopher 0                     Thinking or
+the same chopstick.                                             waiting.
+
+                                                                Eating.
+
+                       Chopstick 0               Chopstick 1    Philosopher 1
+
+Philosopher 4
+
+               CHopstick 4                       Chopstick 2
+
+                                    Chopstick 3
+
+               Philosopher 3                     Philosopher 2
+
+                                                                               73
+Dining philosopher ­ requirement #1
+
+· Mutual exclusion
+
+   ­ What if there is no mutual exclusion?
+
+         · Then: while you're eating, the two men besides you will and
+           must steal all your chopsticks!
+
+· Let's proposal the following solution:
+
+   ­ When you are hungry, you have to check if anyone is
+      using the chopstick that you need.
+
+   ­ If yes, you have to wait.
+   ­ If no, seize both chopsticks.
+   ­ After eating, put down all your chopsticks.
+
+                                                                                                                                                                             74
+Dining philosopher ­ meeting requirement #1?
+
+        Shared object    A quick question: what should be
+                         initial values?
+#define N 5
+semaphore chop[N];                          Main Function
+
+       Helper Functions            1 void philosopher(int i) {
+
+void take(int i) {                 2     while (TRUE) {
+      down(&chop[i]);
+                                   3        think();
+}
+                         Section   4        take(i);
+void put(int i) {         Entry
+      up(&chop[i]);                5        take((i+1) % N);
+                         Critical
+}                        Section   6        eat();
+
+                         Section   7        put(i);
+                           Exit
+                                   8        put((i+1) % N);
+
+                                   9     }
+
+                                   10 }
+
+                                                                75
+Dining philosopher ­ meeting requirement #1?
+
+        Final Destination: Deadlock!
+
+                                                                Main Function
+
+        Line                                           1 void philosopher(int i) {
+        1-4
+Phil 1                                                 2     while (TRUE) {
+Phil 2            Line
+Phil 3            1-4                                  3        think();
+Phil 4
+Phil 5                      Line                       4        take(i);
+                             1-4
+                                                       5        take((i+1) % N);
+                                       Line
+                                       1-4             6        eat();
+
+                                                 Line  7        put(i);
+                                                  1-4
+                                                       8        put((i+1) % N);
+
+                                                       9     }
+
+                                                       10 }
+
+                                                                                    76
+Dining philosopher ­ requirement #2
+
+· Synchronization
+
+   ­ Should avoid any potential deadlocking execution
+      order.
+
+· How about the following suggestions:
+
+   ­ First, a philosopher takes a chopstick.
+   ­ If a philosopher finds that he cannot take the second
+
+      one, then he should put down the first chopstick.
+   ­ Then, the philosopher goes to sleep for a while.
+   ­ Again, the philosopher tries to get both chopsticks until
+
+      both ones are seized.
+
+                                                                                                                                                                             77
+Dining philosopher ­ meeting requirement #2?
+
+       The code: meeting requirement #2?
+
+1 void philosopher(int i) {  1 void take(int i) {
+
+2   while (TRUE) {           2 while(TRUE) {
+
+3      think();              3     down(&chop[i]);
+
+4      take(i);              4     if (isUsed((i+1)%N)) {
+
+5      eat();                5        up(&chop[i]);
+
+6      up(&chop[i]);         6        sleep(1);
+
+7      up(&chop[(i+1)%N)]);  7     }
+
+8   }                        8     else {
+
+9}                           9        down(&chop[(i+1)%N]);
+
+                             10       break;
+
+                             11    }
+
+                             12 }
+
+                             13 }
+
+                                                             78
+Dining philosopher ­ meeting requirement #2?
+
+   Potential Problem: Philosophers are all busy      Assume N = 3 (because the
+            but no progress were made!                     space is limited)
+
+                                                 1 void take(int i) {
+
+                                                 2 while(TRUE) {
+
+                                                 3     down(&chop[i]);
+
+                                                 4     if (isUsed((i+1)%N)) {
+
+                                                 5        up(&chop[i]);
+
+                                                 6        sleep(1);
+
+                                                 7     }
+
+   1-4            4-6                            8     else {
+
+1                                                9        down(&chop[(i+1)%N]);
+
+   1-3            Zzz            2-3             10       break;
+
+                                                 11    }
+
+        1-4            4-6                       12 }
+
+2                                                13 }
+
+        1-3            Zzz            2-3        1 void philosopher(int i) {
+
+             1-4            5-6                  2     while (TRUE) {
+
+3                                                3        think();
+
+                                                 4        take(i);
+
+             1-4            Zzz            2-3   5        eat();
+
+                                                 6        up(&chop[i]);
+
+                                                 7        up(&chop[(i+1)%N)]);
+
+                                                 8     }
+
+                                                 9}
+
+                                                                                79
+Dining philosopher ­ before the final solution.
+
+· Before we present the final solution, let's see what
+  are the problems that we have.
+
+        Problems
+        Model a chopstick as a semaphore is intuitive, but is not working.
+        The problem is that we are afraid to "down()", as that may lead to a deadlock.
+        Using sleep() to avoid deadlock is effective, yet bringing another problem.
+        We can always create an execution order that keeps all the philosophers busy, but
+        without useful output.
+
+                                                                                                                                                                             80
+Dining philosopher ­ before the final solution.
+
+                              Philosopher 0
+                                  EATING
+
+Philosopher 4  Idea:                                             Philosopher 1
+  CAN'T EAT    - The chopsticks are useless in the model!          CAN'T EAT
+
+               - Need to guarantee: when "Philosopher x" is
+               eating, the left and the right of "Philosoper x"
+               cannot eat!
+
+               Philosopher 3                 Philosopher 2
+                  CAN EAT                       CAN EAT
+
+                                                                                81
+Dining philosopher ­ the final solution.
+
+                Shared object      Main function
+
+#define N 5                    1 void philosopher(int i) {
+#define LEFT ((i+N-1) % N)
+#define RIGHT ((i+1) % N)      2   think();
+
+int state[N];                  3   take(i);
+semaphore mutex = 1;
+semaphore s[N];                4   eat();
+
+                               5   put(i);
+
+                               6}
+
+       Section entry               Section exit                     I will explain the
+                                                                    code later.
+1 void take(int i) {           1 void put(int i) {
+
+2      down(&mutex);           2   down(&mutex);
+
+3      state[i] = HUNGRY;      3   state[i] = THINKING;
+
+4      test(i);                4   test(LEFT);
+
+5      up(&mutex);             5   test(RIGHT);
+
+6      down(&s[i]);            6   up(&mutex);
+
+7}                             7}
+
+                               Extremely important helper function
+
+1 void test(int i) {
+
+2   if(state[i] == HUNGRY && state[LEFT] != EATING && state[RIGHT] != EATING) {
+
+3      state[i] = EATING;
+
+4      up(&s[i]);
+
+5   }
+
+6}
+
+                                                                                        82
+Dining philosopher ­ the final solution.
+
+                Shared object  Going "left" and "right" in a
+                               circular manner.
+#define N 5
+#define LEFT ((i+N-1) % N)        The states of the philosophers, including
+#define RIGHT ((i+1) % N)         "EATING", "THINKING", and "HUNGRY".
+                                  Remember, this is shared array.
+int state[N];
+semaphore mutex = 1;
+semaphore s[N];
+
+To guarantee mutual exclusive access to
+the "state[N]" array.
+
+Guess:                         To fulfill the synchronization requirement.
+
+What is the meaning            Question. What are the initial values of the
+of the semaphore               "s[N]" array?
+s[N]?
+
+                                                                             83
+Dining philosopher ­ the final solution.
+
+                Shared object
+
+#define N 5
+#define LEFT ((i+N-1) % N)
+#define RIGHT ((i+1) % N)
+
+int state[N];
+semaphore mutex = 1;
+semaphore s[N];
+
+       Section entry
+
+1 void take(int i) {              Question. What are they doing?
+
+2      down(&mutex);           If both chopsticks are available,
+                               I eat. Else, I sleep.
+3      state[i] = HUNGRY;
+
+4      test(i);
+
+5      up(&mutex);
+
+6      down(&s[i]);
+
+7}
+
+                               Extremely important helper function
+
+1 void test(int i) {
+
+2   if(state[i] == HUNGRY && state[LEFT] != EATING && state[RIGHT] != EATING) {
+
+3      state[i] = EATING;
+
+4      up(&s[i]);              If they are eating, I can't be eating.
+
+5   }
+
+6}
+
+                                                                                 84
+Dining philosopher ­ the final solution.
+
+Try to let the one on the left of      Section exit
+the caller to eat.
+                                   1 void put(int i) {
+Try to let the one on the right
+of the caller to eat.              2   down(&mutex);
+
+                                   3   state[i] = THINKING;
+
+                                   4   test(LEFT);
+
+                                   5   test(RIGHT);
+
+                                   6   up(&mutex);
+
+                                   7}
+
+                                   Extremely important helper function
+
+1 void test(int i) {
+
+2   if(state[i] == HUNGRY && state[LEFT] != EATING && state[RIGHT] != EATING) {
+
+3      state[i] = EATING;
+
+4      up(&s[i]);                     Wake up the one who can eat!
+
+5   }
+
+6}
+
+                                                                                 85
+Dining philosopher ­ the final solution.
+
+An illustration: How can
+Philosopher 1 start eating?
+
+                              Philosopher 0
+                                THINKING
+
+Philosopher 4                Note: no chopsticks objects    Philosopher 1
+  THINKING                       will be shown in this        THINKING
+
+                               illustration because we
+                                don't need them now.
+
+               Philosopher 3                 Philosopher 2
+                 THINKING                      THINKING
+
+                                                                           86
+Dining philosopher ­ the final solution.
+
+    Section entry
+
+1 void take(int i) {
+
+2   down(&mutex);                      Call take();
+
+3   state[i] = HUNGRY;
+
+4   test(i);
+
+5   up(&mutex);
+
+6   down(&s[i]);                       Philosopher 0
+                                          HUNGRY
+7}                                                    To RIGHT:
+                                                      are you "EATING"?
+    To LEFT:
+    are you "EATING"?
+
+    Philosopher 4                                                    Philosopher 1
+      THINKING                                                         THINKING
+
+                        Philosopher 3                 Philosopher 2
+                          THINKING                      THINKING
+
+                                                                                    87
+Dining philosopher ­ the final solution.
+
+    Section entry
+
+1 void take(int i) {
+
+2   down(&mutex);                      Call take();
+
+3   state[i] = HUNGRY;
+
+4   test(i);
+
+5   up(&mutex);
+
+6   down(&s[i]);                       Philosopher 0
+                                          HUNGRY
+7}                                                    To RIGHT:
+                                                      are you "EATING"?
+    To LEFT:
+    are you "EATING"?
+
+    Philosopher 4                                                          Philosopher 1
+      THINKING                                                               THINKING
+
+                                                                     Calling take().
+                                                                     but, it is blocked.
+
+                                                                     Why?
+
+                        Philosopher 3                 Philosopher 2
+                          THINKING                      THINKING
+
+                                                                                          88
+Dining philosopher ­ the final solution.
+
+    Section entry
+
+1 void take(int i) {
+
+2   down(&mutex);
+
+3   state[i] = HUNGRY;
+
+4   test(i);
+
+5   up(&mutex);
+
+6   down(&s[i]);                       Philosopher 0
+                                           EATING
+7}                                                    To LEFT:
+                                                      are you "EATING"?
+
+    Philosopher 4                      Now, it is                    Philosopher 1
+      THINKING                         freed from                       HUNGRY
+                                       blocking.
+
+                        Philosopher 3                 Philosopher 2  To RIGHT:
+                          THINKING                      THINKING     are you
+                                                                     "EATING"?
+
+                                                                                             89
+Dining philosopher ­ the final solution.
+
+    Section entry
+
+1 void take(int i) {
+
+2   down(&mutex);
+
+3   state[i] = HUNGRY;
+
+4   test(i);
+
+5   up(&mutex);
+
+6   down(&s[i]);        Philosopher 0
+                            EATING
+7}
+
+    Philosopher 4                                                       Philosopher 1
+      THINKING                                                             HUNGRY
+
+   To RIGHT:                                  To LEFT:                      Blocked;
+   are you                                    are you                     because of
+   "EATING"?                                  "EATING"?                  down(&s[1]);
+
+                        Philosopher 3                    Philosopher 2
+                           HUNGRY                          THINKING
+
+                                                                                       90
+Dining philosopher ­ the final solution.
+
+    Section entry
+
+1 void take(int i) {
+
+2   down(&mutex);
+
+3   state[i] = HUNGRY;
+
+4   test(i);
+
+5   up(&mutex);
+
+6   down(&s[i]);                         Philosopher 0
+                                             EATING
+7}
+
+    Philosopher 4                                                                Philosopher 1
+      THINKING                                                                      HUNGRY
+
+                          Philosopher 3                                                 Blocked;
+                              EATING                                                   because of
+                                                                                     down(&s[1]);
+
+                                                        Philosopher 2
+                                                          THINKING
+
+                                                                                                                         91
+Dining philosopher ­ the final solution.
+
+    Section exit          An illustration: How can
+                          Philosopher 1 start eating?
+1 void put(int i) {
+                                               Philosopher 0
+2   down(&mutex);                                THINKING
+
+3   state[i] = THINKING;
+
+4   test(LEFT);                                               Call put();
+
+5   test(RIGHT);                                              To RIGHT:
+                                                              are you "HUNGRY"?
+6   up(&mutex);
+                                                                            Philosopher 1
+7}                                                                             HUNGRY
+
+    To LEFT:
+    are you "HUNGRY"?
+
+    Philosopher 4
+      THINKING
+
+                                                                                Blocked;
+                                                                              because of
+                                                                             down(&s[1]);
+
+                          Philosopher 3                       Philosopher 2
+                              EATING                            THINKING
+
+                                                                                           92
+Dining philosopher ­ the final solution.
+
+    Section exit          1 void test(int i) {
+
+                          2   if(state[i] == HUNGRY && state[LEFT] != EATING && state[RIGHT] != EATING) {
+
+1 void put(int i) {       3      state[i] = EATING;
+
+2   down(&mutex);         4      up(&s[i]);
+
+3   state[i] = THINKING;  5   }
+
+4   test(LEFT);           6}
+
+5   test(RIGHT);
+
+6   up(&mutex);                          Philosopher 0  To LEFT:
+                                           THINKING     are you "EATING"?
+7}
+
+                                         Call put();
+
+    Philosopher 4                                                       PdhobHiwBeloUnlcso(aNoc&uGpskshRee[eYd1r];o)f1;
+      THINKING
+
+                                                     To RIGHT:
+                                                     are you "EATING"?
+
+                          Philosopher 3                 Philosopher 2
+                              EATING                      THINKING
+
+                                                                                                                         93
+Dining philosopher ­ the final solution.
+
+    Section exit          1 void test(int i) {
+
+                          2   if(state[i] == HUNGRY && state[LEFT] != EATING && state[RIGHT] != EATING) {
+
+1 void put(int i) {       3      state[i] = EATING;
+
+2   down(&mutex);         4      up(&s[i]);
+
+3   state[i] = THINKING;  5   }
+
+4   test(LEFT);           6}
+
+5   test(RIGHT);
+
+6   up(&mutex);                          Philosopher 0
+                                           THINKING
+7}
+
+                                         Call put();
+
+    Philosopher 4                                       PdhobHiwBeloUnlcso(aNoc&uGpskshRee[eYd1r];o)f1;
+      THINKING
+
+                          Philosopher 3                                         Remove your
+                              EATING                                            blocked state by
+                                                                                calling up(&s[1]);
+
+                                                        Philosopher 2
+                                                          THINKING
+
+                                                                                                         94
+Dining philosopher ­ the final solution.
+
+    Section entry
+
+1 void take(int i) {
+
+2   down(&mutex);
+
+3   state[i] = HUNGRY;
+
+4   test(i);
+
+5   up(&mutex);
+
+6   down(&s[i]);                       Philosopher 0
+                                         THINKING
+7}
+
+    Philosopher 4                                                    Philosopher 1
+      THINKING                                                           EATING
+
+                                                                     Eventually...
+
+                        Philosopher 3                 Philosopher 2
+                            EATING                      THINKING
+
+                                                                                    95
+Dining philosopher - summary
+
+· What is the shared object in the final solution?
+
+   ­ How to guarantee the mutual exclusion
+
+    Section entry           Section exit
+
+1 void take(int i) {    1 void put(int i) {
+
+2   down(&mutex);       2   down(&mutex);
+
+3   state[i] = HUNGRY;  3   state[i] = THINKING;
+
+4   test(i);            4   test(LEFT);
+
+5   up(&mutex);         5   test(RIGHT);
+
+6   down(&s[i]);        6   up(&mutex);
+
+7}                      7}
+
+                                                    96
+Dining philosopher - summary
+
+· Think:
+
+   ­ Why the semaphore s[N] is needed
+   ­ How to set its initial value
+
+       Section entry
+
+1 void take(int i) {
+
+2      down(&mutex);
+
+3      state[i] = HUNGRY;
+
+4      test(i);
+
+5      up(&mutex);
+
+6      down(&s[i]);
+
+7}
+
+                           Extremely important helper function
+
+1 void test(int i) {
+
+2   if(state[i] == HUNGRY && state[LEFT] != EATING && state[RIGHT] != EATING) {
+
+3      state[i] = EATING;
+
+4      up(&s[i]);
+
+5   }
+
+6}
+
+                                                                                 97
+Dining philosopher - summary
+
+· Solution to IPC problem can be difficult to
+  comprehend.
+
+   ­ Usually, intuitive methods failed.
+   ­ Depending on time, e.g., sleep(1), does not guarantee a
+
+      useful solution.
+
+· As a matter of fact, dining philosopher is not
+  restricted to 5 philosophers.
+
+                                                                                                                                                                             98
+The Deadlock Problem
+
+Classic IPC problems
+      - Dining philosopher problem
+      - Producer-consumer problem
+      - Reader-writer problem
+
+                                                                                                              P
+
+                                        P
+
+                      Let's teach them     P
+
+                      not to fight.
+
+                                                                                                                 99
+Producer-consumer problem ­ recall
+
+· Also known as the bounded-buffer problem.
+
+A bounded  -It is a shared object;
+buffer     -Its size is bounded, say N slots.
+           -It is a queue (imagine that it is an array implementation of queue).
+
+A producer -It produces a unit of data, and
+
+process    -writes that a piece of data to the tail of the buffer at one time.
+
+A consumer -It removes a unit of data from the head of the bounded buffer at
+
+process    one time.
+
+                                                      ls | less
+
+ls         enqueue                           dequeue  less
+
+Producer              pipe ­ bounded                  Consumer
+
+                                                                                               100
+Producer-consumer problem ­ recall
+
+   Producer-    When the producer wants to
+   consumer     (a) put a new item in the buffer, but
+requirement #1  (b) the buffer is already full...
+
+                Then,
+                (1) The producer should be suspended, and
+                (2) The consumer should wake the producer up after she has
+
+                    dequeued an item.
+
+   Producer-    When the consumer wants to
+   consumer     (a) consumes an item from the buffer, but
+requirement #2  (b) the buffer is empty...
+
+                Then,
+                (1) The consumer should be suspended, and
+                (2) The producer should wake the consumer up after she has
+
+                    enqueued an item.
+
+                                                                            101
+Producer-consumer problem
+
+· Pipe is working fine. Is it enough?
+
+   ­ What if we cannot use pipes?
+
+         · Say, there are 2 producers and 2 consumers without any
+           parent-child relationships?
+
+   ­ Then, the kernel can't protect you with a pipe.
+
+· In the following, we revisit the producer-consumer
+  problem with the use of shared objects and
+  semaphores, instead of pipe.
+
+                                                                                                                                                                            102
+Design ­ Semaphores
+
+· ISSUE #1: Mutual Exclusion.
+
+    Solution: one binary semaphore (mutex)
+
+· ISSUE #2: Synchronization (coordination).
+
+   ­ Remember the two requirements:
+
+         · Insert an item when it is not FULL
+         · Consume an item when it is not EMPTY
+
+   ­ Can we use a binary semaphore?
+
+    Solution: two counting semaphores (full & empty)
+
+                                                                                                                                                                            103
+Producer-consumer problem ­ solution
+
+Note
+
+The functions "insert_item()" and
+"remove_item()" are accessing the bounded
+buffer (codes in critical section).
+
+The size of the bounded buffer is "N".
+
+         Producer function                    Consumer Function
+
+1 void producer(void) {                    1 void consumer(void) {
+
+2     int item;                            2  int item;
+
+3                                          3
+
+4     while(TRUE) {                        4  while(TRUE) {
+
+5        item = produce_item();            5
+
+6                                          6
+
+7                                          7     item = remove_item();
+
+8        insert_item(item);                8
+
+9                                          9
+
+10                               10              consume_item(item);
+
+11    }                          11           }
+
+12 }                             12 }
+
+                                                                        104
+Producer-consumer problem ­ solution
+
+Note                                            Shared object
+Mutual exclusion requirement
+Synchronization requirement               #define N 100
+                                          typedef int semaphore;
+                                          semaphore mutex = 1;
+                                          semaphore empty = N;
+                                          semaphore full = 0;
+
+         Producer function             Consumer Function
+
+1 void producer(void) {          1 void consumer(void) {
+
+2     int item;                  2     int item;
+
+3                                3
+
+4     while(TRUE) {              4     while(TRUE) {
+
+5        item = produce_item();  5
+
+6                                6
+
+7                                7        item = remove_item();
+
+8        insert_item(item);      8
+
+9                                9
+
+10                               10       consume_item(item);
+
+11    }                          11    }
+
+12 }                             12 }
+
+                                                                  105
+Producer-consumer problem ­ Understanding
+
+Why we need three semaphores, "empty",           Shared object
+"full", "mutex"?
+                                           #define N 100
+                                           typedef int semaphore;
+                                           semaphore mutex = 1;
+                                           semaphore empty = N;
+                                           semaphore full = 0;
+
+         Producer function              Consumer Function
+
+1 void producer(void) {          1 void consumer(void) {
+
+2     int item;                  2      int item;
+
+3                                3
+
+4     while(TRUE) {              4      while(TRUE) {
+
+5        item = produce_item();  5
+
+6                                6
+
+7                                7         item = remove_item();
+
+8        insert_item(item);      8
+
+9                                9
+
+10                               10        consume_item(item);
+
+11    }                          11     }
+
+12 }                             12 }
+
+                                                                   106
+Producer-consumer problem ­ Understanding
+
+Why we need three semaphores, "empty",           Shared object
+"full", "mutex"?
+                                           #define N 100
+mutex:                                     typedef int semaphore;
+What is its purpose?                       semaphore mutex = 1;
+Why is the initial value of mutex 1?       semaphore empty = N;
+                                           semaphore full = 0;
+
+         Producer function              Consumer Function
+
+1 void producer(void) {          1 void consumer(void) {
+
+2     int item;                  2      int item;
+
+3                                3
+
+4     while(TRUE) {              4      while(TRUE) {
+
+5        item = produce_item();  5
+
+6                                6         down(&mutex);
+
+7        down(&mutex);           7         item = remove_item();
+
+8        insert_item(item);      8         up(&mutex);
+
+9        up(&mutex);             9
+
+10                               10        consume_item(item);
+
+11    }                          11     }
+
+12 }                             12 }
+
+                                                                   107
+Producer-consumer problem ­ Understanding
+
+Why we need three semaphores, "empty",        Shared object
+"full", "mutex"?
+                                        #define N 100
+mutex:                                  typedef int semaphore;
+what is its purpose?                    semaphore mutex = 1;
+Why is the initial value of mutex 1?    semaphore empty = N;
+                                        semaphore full = 0;
+
+         Producer function       The "mutex" stands for mutual exclusion.
+
+1 void producer(void) {          - down() and up() statements are the
+                                 entry and the exit of the critical section,
+2     int item;                  respectively.
+
+3                                What is the meaning of the initial value 1?
+
+4     while(TRUE) {
+
+5        item = produce_item();
+
+6
+
+7        down(&mutex);
+
+8        insert_item(item);
+
+9        up(&mutex);
+
+10
+
+11    }
+
+12 }
+
+                                                                              108
+Producer-consumer problem ­ Understanding
+
+Why we need three semaphores, "empty",           Shared object
+"full", "mutex"?
+                                           #define N 100
+How about "full" and "empty"?              typedef int semaphore;
+                                           semaphore mutex = 1;
+                                           semaphore empty = N;
+                                           semaphore full = 0;
+
+         Producer function              Consumer Function
+
+1 void producer(void) {          1 void consumer(void) {
+
+2     int item;                  2      int item;
+
+3                                3
+
+4     while(TRUE) {              4      while(TRUE) {
+
+5        item = produce_item();  5         down(&full);
+
+6        down(&empty);           6         down(&mutex);
+
+7        down(&mutex);           7         item = remove_item();
+
+8        insert_item(item);      8         up(&mutex);
+
+9        up(&mutex);             9         up(&empty);
+
+10       up(&full);              10        consume_item(item);
+
+11    }                          11     }
+
+12 }                             12 }
+
+                                                                   109
+Producer-consumer problem ­ Understanding
+
+· The two variables are not for mutual exclusion, but
+  for process synchronization.
+
+   ­ "Process synchronization" means to coordinate the set
+      of processes so as to produce meaningful output.
+
+         Producer function             Consumer Function
+
+1 void producer(void) {          1 void consumer(void) {
+
+2     int item;                  2     int item;
+
+3                                3
+
+4     while(TRUE) {              4     while(TRUE) {
+
+5        item = produce_item();  5        down(&full);
+
+6        down(&empty);           6        down(&mutex);
+
+7        down(&mutex);           7        item = remove_item();
+
+8        insert_item(item);      8        up(&mutex);
+
+9        up(&mutex);             9        up(&empty);
+
+10       up(&full);              10       consume_item(item);
+
+11    }                          11    }
+
+12 }                             12 }
+
+                                                                 110
+Producer-consumer problem ­ Understanding
+
+For "empty",                                                    #define N 100
+- Its initial value is N;                                      typedef int semaphore;
+- It decrements by 1 in each iteration.                         semaphore mutex = 1;
+- When it reaches 0, the producers sleeps.                      semaphore empty = N;
+                                                                semaphore full = 0;
+So, does it sound like one of the requirements?
+                                                     The consumer wakes the producer
+                                                     up when it finds "empty" is 0.
+
+         Producer function                             Consumer Function
+
+1 void producer(void) {                          1 void consumer(void) {
+
+2     int item;                                  2     int item;
+
+3                                                3
+
+4     while(TRUE) {                              4     while(TRUE) {
+
+5        item = produce_item();                  5        down(&full);
+
+6        down(&empty);                           6        down(&mutex);
+
+7        down(&mutex);                           7        item = remove_item();
+
+8        insert_item(item);                      8        up(&mutex);
+
+9        up(&mutex);                             9        up(&empty);
+
+10       up(&full);                              10       consume_item(item);
+
+11    }                                          11    }
+
+12 }                                             12 }
+
+                                                                                       111
+Producer-consumer problem ­ Understanding
+
+· Semaphore can be more than mutual exclusion!
+
+                 empty      It represents the number of empty slots.
+                 full       It represents the number of occupied slots.
+
+         Producer function             Consumer Function
+
+1 void producer(void) {          1 void consumer(void) {
+
+2     int item;                  2     int item;
+
+3                                3
+
+4     while(TRUE) {              4     while(TRUE) {
+
+5        item = produce_item();  5        down(&full);
+
+6        down(&empty);           6        down(&mutex);
+
+7        down(&mutex);           7        item = remove_item();
+
+8        insert_item(item);      8        up(&mutex);
+
+9        up(&mutex);             9        up(&empty);
+
+10       up(&full);              10       consume_item(item);
+
+11    }                          11    }
+
+12 }                             12 }
+
+                                                                         112
+Producer-consumer problem ­ question
+
+Question.                                           Shared object
+Can we swap Lines 6 & 7 of the producer?
+                                              #define N 100
+Let us simulate what will happen with the     typedef int semaphore;
+modified code!                                semaphore mutex = 1;
+                                              semaphore empty = N;
+                                              semaphore full = 0;
+
+         Producer function                 Consumer Function
+
+1 void producer(void) {          1 void consumer(void) {
+
+2     int item;                  2         int item;
+
+3                                3
+
+4     while(TRUE) {              4         while(TRUE) {
+
+5        item = produce_item();  5            down(&full);
+
+6*       down(&mutex);           6            down(&mutex);
+
+7*       down(&empty);           7            item = remove_item();
+
+8        insert_item(item);      8            up(&mutex);
+
+9        up(&mutex);             9            up(&empty);
+
+10       up(&full);              10           consume_item(item);
+
+11    }                          11        }
+
+12 }                             12 }
+
+                                                                      113
+Producer-consumer problem ­ question
+
+Producer  running until Line                 We are showing the value of the
+Consumer               10                    semaphores before the producer is
+                                             suspended.
+
+          mutex = 1               empty = 0     full = N
+
+         Producer function                   Consumer Function
+
+1 void producer(void) {           1 void consumer(void) {
+
+2     int item;                   2          int item;
+
+3                                 3
+
+4     while(TRUE) {               4          while(TRUE) {
+
+5         item = produce_item();  5             down(&full);
+
+6*        down(&mutex);           6             down(&mutex);
+
+7*        down(&empty);           7             item = remove_item();
+
+8         insert_item(item);      8             up(&mutex);
+
+9         up(&mutex);             9             up(&empty);
+
+10        up(&full);              10            consume_item(item);
+
+11    }                           11         }
+
+12 }                              12 }
+
+                                                                                114
+Producer-consumer problem ­ question
+
+Producer  running until Line      Line 4­7* sleep       because of
+Consumer               10                             down(&mutex);
+                                                      down(&empty);
+
+          mutex = 0               empty = 0           full = N
+
+         Producer function                         Consumer Function
+
+1 void producer(void) {           1 void consumer(void) {
+
+2     int item;                   2                int item;
+
+3                                 3
+
+4     while(TRUE) {               4                while(TRUE) {
+
+5         item = produce_item();  5                   down(&full);
+
+6*        down(&mutex);           6                   down(&mutex);
+
+7*        down(&empty);           7                   item = remove_item();
+
+8         insert_item(item);      8                   up(&mutex);
+
+9         up(&mutex);             9                   up(&empty);
+
+10        up(&full);              10                  consume_item(item);
+
+11    }                           11               }
+
+12 }                              12 }
+
+                                                                             115
+Producer-consumer problem ­ question
+
+Producer  running until Line      Line 4­7* sleep      context       Endless
+Consumer               10                             switching       Sleep
+
+                                                   Line 4­6 sleep
+
+          mutex = 0               empty = 0           full = N-1
+
+         Producer function                         Consumer Function
+
+1 void producer(void) {           1 void consumer(void) {
+
+2     int item;                   2                int item;
+
+3                                 3
+
+4     while(TRUE) {               4                while(TRUE) {
+
+5         item = produce_item();  5                   down(&full);
+
+6*        down(&mutex);           6                   down(&mutex);
+
+7*        down(&empty);           7                   item = remove_item();
+
+8         insert_item(item);      8                   up(&mutex);
+
+9         up(&mutex);             9                   up(&empty);
+
+10        up(&full);              10                  consume_item(item);
+
+11    }                           11               }
+
+12 }                              12 }
+
+                                                                             116
+Producer-consumer problem
+
+· Deadlock happens when a circular wait appears
+
+   ­ The producer is waiting for the consumer to "up()" the
+      "empty" semaphore, and
+
+   ­ the consumer is waiting for the producer to "up()" the
+      "mutex" semaphore.
+
+I'm holding it.      mutex I'm waiting for it.
+
+     Producer        empty          Consumer
+I'm waiting for it.
+                            I'm holding it (because I've
+                            a chance to "up" it)
+
+                                                          117
+Producer-consumer problem
+
+· Deadlock happens when a circular wait appears
+
+   ­ The producer is waiting for the consumer to "up()" the
+      "empty" semaphore, and
+
+   ­ the consumer is waiting for the producer to "up()" the
+      "mutex" semaphore.
+
+· No progress could be made by all processes + All
+  processes are blocked.
+
+   ­ Implication: careless implementation of the producer-
+      consumer solution can be disastrous.
+
+                                                                                                                                                                            118
+Summary on producer-consumer problem
+
+· The problem can be divided into two sub-problems.
+
+   ­ Mutual exclusion.
+
+         · The buffer is a shared object. Mutual exclusion is needed.
+
+   ­ Synchronization.
+
+         · Because the buffer's size is bounded, coordination is needed.
+
+                                                Synchronization
+
+Producer                    Consumer
+
+          Mutual Exclusion                                    119
+Summary on producer-consumer problem
+
+· How to guarantee mutual exclusion?
+
+   ­ A binary semaphore is used as the entry and the exit of
+      the critical sections.
+
+· How to achieve synchronization?
+
+   ­ Two semaphores are used as counters to monitor the
+      status of the buffer.
+
+   ­ Two semaphores are needed because the two
+      suspension conditions are different.
+
+                                                                                                                                                                            120
+The Deadlock Problem
+
+Classic IPC problems
+      - Dining philosopher problem
+      - Producer-consumer problem
+      - Reader-writer problem
+
+                                                                                                              P
+
+                                        P
+
+                      Let's teach them     P
+
+                      not to fight.
+
+                                                                                                                 121
+Reader-writer problem ­ introduction
+
+· It is a concurrent database problem.
+
+       Reader  Reader
+Reader
+                                        Readers are
+                                        allowed to read
+                                        the content of the
+                                        database concurrently.
+
+                                                                                                    122
+Reader-writer problem ­ introduction
+
+· It is a concurrent database problem.
+
+       Reader  Reader
+Reader
+                        Writer
+
+                       A writer needs to lock
+                       the database exclusively
+                       so that the readers would
+                       not retrieve inconsistent
+                       data.
+
+                                                                      123
+Reader-writer problem ­ introduction
+
+· It is a concurrent database problem.
+
+       Reader  Reader
+Reader
+                        Writer
+
+                       In other words, a writer
+                       is forbidden to write any
+                       data before the readers
+                       have finished reading.
+
+                                                                      124
+Reader-writer problem ­ introduction
+
+· It is a concurrent database problem.
+
+      Reader  Reader
+Writer
+                       Writer
+
+                      Of course, a writer will
+                      also block the access from
+                      other writers.
+
+                                        125
+Reader-writer problem ­ subproblems
+
+· A mutual exclusion problem.
+
+    ­ The database is a shared object.
+
+· A synchronization problem.
+
+    ­ Rule 1. While a reader is reading, other readers is allowed to
+      read the database.
+
+    ­ Rule 2. While a reader is reading, no writers is allowed to
+      write to the database.
+
+    ­ Rule 3. While a writer is writing, no writers and readers are
+      allowed to access the database.
+
+· A concurrency problem.
+
+    ­ Simultaneous access for multiple readers is allowed and
+      must be guaranteed.
+
+                                                                                                                                                                            126
+Reader-writer problem ­ solution outline
+
+· Mutual exclusion: relate the readers and the
+  writers to one semaphore.
+
+   ­ This guarantees no readers and writers could proceed to
+      their critical sections at the same time.
+
+   ­ This also guarantees no two writers could proceed to
+      their critical sections at the same time.
+
+Reader  Semaphore  Writer
+         database
+
+                           127
+Reader-writer problem ­ solution outline
+
+· Readers' concurrency
+
+   ­ The first reader coming to the system "down()" the
+      "database" semaphore.
+
+   ­ The last reader leaving the system "up()" the
+      "database" semaphore.
+
+ReRaeRdaeRedaerRedaeredaredrer  Shared object
+                                reader counter
+
+                                                         128
+Reader-writer problem ­ final solution
+
+                Shared object                        Reader Function
+
+semaphore db = 1;                    1 void reader(void) {
+semaphore mutex = 1;
+int read_count = 0;                  2     while(TRUE) {
+
+                                     3               down(&mutex);
+                                     S4ection Entry read_count++;
+
+                                     5               if(read_count == 1)
+
+                                     6               down(&db);
+
+                  Writer function    7               up(&mutex);
+
+1 void writer(void) {                Cr8itical Section read_database();
+
+2              while(TRUE) {
+
+Se34ction Entry   prepare_write();    S9ection Exit  down(&mutex);
+                  down(&db);         10              read_count--;
+                                                     if(read_count == 0)
+                                     11
+                                                           up(&db);
+Crit5ical Section write_database();  12              up(&mutex);
+                                                     process_data();
+                                     13
+
+Se6ction Exit     up(&db);           14
+
+7              }                     15    }
+
+8}                                   16 }
+
+                                                                          129
+Reader-writer problem ­ final solution
+
+                Shared object  Guarantee the mutual exclusion
+                               between the readers and the writers.
+semaphore db = 1;
+semaphore mutex = 1;
+int read_count = 0;
+
+                               Protect the "read_count" variable.
+
+                               Keep track of the number of readers in
+                               the system.
+
+                                                                       130
+Reader-writer problem ­ final solution
+
+                     Shared object
+
+     semaphore db = 1;
+     semaphore mutex = 1;
+     int read_count = 0;
+
+                  Writer function
+
+1 void writer(void) {
+
+2              while(TRUE) {
+
+Se43ction Entry   prepare_write();   The writer is allowed to enter its
+                  down(&db);         critical section when no other
+                                     process is in its critical section
+Crit5ical Section write_database();  (protected by the "db" semaphore)
+
+Se6ction Exit     up(&db);                                                                                        131
+
+7              }
+
+8}
+Reader-writer problem ­ final solution
+
+                Shared object                              Reader Function
+
+semaphore db = 1;                                 1 void reader(void) {
+semaphore mutex = 1;
+int read_count = 0;                               2     while(TRUE) {
+
+The first reader "down()" the "db"                3        down(&mutex);
+semaphore so that no writers would be
+allowed to enter their critical sections.         4        read_count++;
+
+The last reader "up()" the "db" semaphore         5        if(read_count == 1)
+so as to let the writers to enter their critical
+section.                                          6        down(&db);
+
+                                                  7        up(&mutex);
+
+                                                  8        read_database();
+
+                                                  9        down(&mutex);
+
+                                                  10       read_count--;
+
+                                                  11       if(read_count == 0)
+
+                                                  12       up(&db);
+
+                                                  13       up(&mutex);
+
+                                                  14       process_data();
+
+                                                  15    }
+
+                                                  16 }
+
+                                                                                132
+Reader-writer problem ­ summary
+
+· This solution does not limit the number of readers
+  and the writers admitted to the system.
+
+   ­ A realistic database needs this property.
+
+· This solution gives readers a higher priority over the
+  writers.
+
+   ­ Whenever there are readers, writers must be blocked,
+      not the other way round.
+
+· What if a writer should be given a higher priority?
+
+                                                                                                                                                                            133
+Summary on IPC problems
+
+· The problems have the following properties in
+  common:
+
+    ­ Multiple processes;
+    ­ Shared and limited resources;
+    ­ Processes have to be synchronized in order to generate
+
+      useful output;
+
+· The synchronization algorithms have the following
+  requirements in common:
+
+    ­ Guarantee mutual exclusion;
+    ­ Uphold the correct synchronization among processes;
+    ­ Deadlock-free.
+
+                                                                                                                                                                            134
+Summary on Ch5                               IPC methods
+                                  Shared memory, Pipes, Sockets
+        Cooperating Processes
+     Processes Communication                How to realize
+                                        Define critical section
+            Race Condition
+           Mutual Exclusion               How to implement
+                                 4 requirements & 5 schemes
+       Process Synchronization   Semaphore
+                Deadlock
+                                           Classic problems
+                                 Producer-consumer problem
+                                 Dining philosopher problem
+                                 Reader-writer problem
+
+                                                                                                          135
+

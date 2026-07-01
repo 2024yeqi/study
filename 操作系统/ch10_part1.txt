@@ -1,0 +1,1055 @@
+Operating Systems
+
+Prof. Yongkun Li
+- 
+http://staff.ustc.edu.cn/~ykli
+
+                                    Ch10, part 1
+                                Details of FAT32
+
+                                                                                             1
+Topics in Ch10
+
+                                          Details of FAT32
+                     File attributes and directory entries, file operations
+
+                                         Details of Ext2/3/4
+        Detailed layout, detailed inode structure (file attributes), FS operations...
+
+                                                                                                                                                                               2
+Details of FAT32
+
+· Introduction
+· Directory and File Attributes
+· File Operations
+
+   ­ Read files
+   ­ Write files
+   ­ Delete files
+   ­ Recover deleted files
+
+    Microsoft Extensible Firmware Initiative FAT32 File System
+    Specification (FAT: General Overview of On-Disk Format),
+    Version 1.03, December 6, 2000, hardware white papers @
+    Microsoft Corporation.
+
+                                                                                                                                                                               3
+Recall on FAT allocation
+
+· The layout              A block is named a cluster.
+
+                 File System       FAT12    FAT16       FAT32
+              Cluster addr length  12 bits  16 bits  32 bits (28?)
+
+              Number of            4K       64K      256M
+                clusters
+
+                                                           4
+Trivia           When a sector is > 512B ...
+
+· Cluster Size:
+
+   512B 1KB 2KB 4KB 8KB 16KB 32KB 64KB 128KB 256KB
+
+­ Try typing "help format" in the command prompt in
+  Windows.
+
+· Calculating the maximum partition size
+
+   ­ with the cluster size = 32KB...
+
+                 32 × 210 × 228 = 243 (8)
+
+                                                     5
+Typical layout of a FAT32 partition
+
+Boot sector     Propose                               Size
+FSINFO          Store FS-specific parameters          1 sector, 512 bytes
+Reserved        Free-space management                 1 sector, 512 bytes
+sectors
+                Don't ask me, ask Micro$oft!          Variable, can be changed during format.
+FAT (2 pieces)
+                A robust design: if "FAT 1" is        Variable, depends on disk size and
+Root directory  corrupted or containing bad sectors,  cluster size.
+                then "FAT 2" can act as a backup.
+
+                Start of the directory tree.          At least one cluster, depend on the
+                                                      number of director entries.
+
+ Boot           FAT1  FAT2                        Root
+Sector FSINFO                                 Directory
+
+                                                                                               6
+Typical layout of a FAT32 partition
+
+$ sudo mkfs.vfat -F32 /dev/ram0        Format the disk, "-F32" means FAT32.
+mkfs.fat 3.0.28 (2015-05-16)           Read the information stored in the boot sector.
+......
+$ sudo dosfsck -v /dev/ram0
+
+                                                  Running "dosfsck", DOS
+                                                  file system check, on a
+                                                  FAT32 FS.
+
+                                                  This program reads
+                                                  details from the Boot
+                                                  Sector.
+
+ Boot          FAT1              FAT2      Root
+Sector FSINFO                          Directory
+
+                                                                                        7
+Typical layout of a FAT32 partition
+
+$ sudo mkfs.vfat -F32 /dev/ram0                           Details of the Boot Sector
+mkfs.fat 3.0.28 (2015-05-16)
+......
+$ sudo dosfsck -v /dev/ram0
+fsck.fat 3.0.28 (2015-05-16)
+
+Checking we can access the last sector of the filesystem
+
+Boot sector contents:
+
+System ID "mkfs.fat"
+
+Media byte 0xf8 (hard disk)
+
+512 bytes per logical sector                        The boot sector says:
+512 bytes per cluster
+
+32 reserved sectors                                 A cluster is made of 1 sector.
+
+First FAT starts at byte 16384 (sector 32)
+
+2 FATs, 32 bit entries
+
+516608 bytes per FAT (= 1009 sectors)
+
+Root directory start at cluster 2 (arbitrary size)
+
+Data area starts at byte 1049600 (sector 2050)            One cluster size: 512
+      129022 data clusters (66059264 bytes)                 bytes in this case
+
+......
+
+ Boot                  FAT1      FAT2           Root
+Sector FSINFO                               Directory
+
+32 sectors
+
+                                                                                                                                                8
+Typical layout of a FAT32 partition
+
+$ sudo mkfs.vfat -F32 /dev/ram0
+mkfs.fat 3.0.28 (2015-05-16)
+......
+$ sudo dosfsck -v /dev/ram0
+fsck.fat 3.0.28 (2015-05-16)
+
+Checking we can access the last sector of the filesystem
+
+Boot sector contents:
+
+System ID "mkdosfs"
+
+Media byte 0xf8 (hard disk)                                The boot sector says:
+           512 bytes per logical sector                    2 FATs and each of them is of
+           512 bytes per cluster
+
+        32 reserved sectors                                size 516,608 bytes.
+
+First FAT starts at byte 16384 (sector 32)
+
+        2 FATs, 32 bit entries
+
+      516608 bytes per FAT (= 1009 sectors)                   Number of FATs and the
+Root directory start at cluster 2 (arbitrary size)         length of each entry in a FAT.
+Data area starts at byte 1049600 (sector 2050)
+
+129022 data clusters (66059264 bytes)
+
+......
+
+                       Good! No slack space between
+                       reserved sectors of the first FAT.
+
+ Boot   FSINFO         FAT1      FAT2           Root
+Sector                                      Directory
+
+32 sectors             1009 1009
+
+                                                                                           9
+Typical layout of a FAT32 partition
+
+$ sudo mkfs.vfat -F32 /dev/ram0                           The first data cluster is
+mkfs.fat 3.0.28 (2015-05-16)                              Cluster #2 and it is usually,
+......                                                    not always, the root
+$ sudo dosfsck -v /dev/ram0                               directory.
+fsck.fat 3.0.28 (2015-05-16)
+                                                          Cluster #0 & #1 are
+Checking we can access the last sector of the filesystem  reserved.
+Boot sector contents:
+System ID "mkdosfs"                                       32 + 1009 x 2 = 2050
+Media byte 0xf8 (hard disk)
+
+           512 bytes per logical sector
+           512 bytes per cluster
+
+             32 reserved sectors
+First FAT starts at byte 16384 (sector 32)
+
+               2 FATs, 32 bit entries
+      516608 bytes per FAT (= 1009 sectors)
+Root directory start at cluster 2 (arbitrary size)
+Data area starts at byte 1049600 (sector 2050)
+      129022 data clusters (66059264 bytes)
+......
+
+ Boot          FAT1  FAT2      Root
+Sector FSINFO              Directory
+
+32 sectors     1009 1009 2050 and beyond...
+
+                                                          10
+Details of FAT32
+
+· Introduction
+· Directory and File Attributes
+· File Operations
+
+   ­ Read files
+   ­ Write files
+   ­ Delete files
+   ­ Recover deleted files
+
+                                                                                                                                                                             11
+Directory Traversal
+
+Step (1) Read the directory file of the root             c:\> dir c:\windows
+directory starting from Cluster #2.                      ......
+                                                         06/13/2012 2,033,216 explorer.exe
+"C:\windows" starts from Cluster #123.                   08/04/2015 169,120 notepad.exe
+                                                         ......
+                                                         c:\> _
+
+A directory          Filename  Cluster #2     Cluster #         How does this work?
+entry                .         Attributes     ?
+                     ..        ......         ?          Check this out by yourself.
+                     ......    ......         ......     Whether those two
+                     windows   ......         123        directory entries exist or
+                               ......                    not.
+
+             Boot    FSINFO    FAT1 FAT2        Root
+             Sector                           Directory
+
+                                                                                            12
+Directory Traversal
+
+Step (2) Read the directory file of the              c:\> dir c:\windows
+"C:\windows" starting from Cluster #123.             ......
+                                                     06/13/2012 2,033,216 explorer.exe
+                                                     08/04/2015 169,120 notepad.exe
+                                                     ......
+                                                     c:\> _
+
+                    Cluster #123                            How does this work?
+
+        Filename    Attributes            Cluster #  But, where are the
+                                          ?          information, e.g., file size,
+        .           ......                ?          modification time, etc?
+                                          ......
+        ..          ......                456
+
+        ......      ......
+
+        notepad.exe ......
+
+Boot        FSINFO  FAT1 FAT2               Root
+Sector                                    Directory
+
+                                                                                        13
+Directory entry
+
+· Directory entry is just a structure.
+
+                                             what?  Filename  Attributes Cluster #
+
+Bytes                   Description                 explorer.exe ...... 32
+ 0-0
+       1st character of the filename                          How?
+       (0x00 or 0xe5 means unallocated)
+
+1-10 7+3 characters of filename + extension.       0e x p l o r e r7
+11-11 File attributes (e.g., read only, hidden)    8 e x e ... ... ... ... ... 15
+12-12 Reserved.                                   16 ... ... ... ... 00 00 ... ... 23
+13-19 Creation and access time information.       24 ... ... 20 00 00 C4 0F 00 31
+
+20-21  High 2 bytes of the first cluster address    Note. This is the 8+3 naming convention.
+       (0 for FAT16 and FAT12).
+
+22-25 Written time information.                     8 characters for name +
+26-27 Low 2 bytes of first cluster address.         3 characters for file extension
+
+28-31 File size.
+
+                                                                                              14
+Directory entry
+
+· Directory entry is just a structure.
+
+                                             what?  Filename  Attributes Cluster #
+
+Bytes                   Description                 explorer.exe ...... 32
+ 0-0
+       1st character of the filename                          How?
+       (0x00 or 0xe5 means unallocated)
+
+1-10 7+3 characters of filename + extension.       0e     x p l o r e r7
+11-11 File attributes (e.g., read only, hidden)    8e     x e ... ... ... ... ... 15
+12-12 Reserved.                                   16 ...  ... ... ... 00 00 ... ... 23
+13-19 Creation and access time information.       24 ...  ... 20 00 00 C4 0F 00 31
+
+20-21  High 2 bytes of the first cluster address
+       (0 for FAT16 and FAT12).
+                                                          How to calculate the first
+22-25 Written time information.                           cluster address?
+
+26-27 Low 2 bytes of first cluster address.
+
+28-31 File size.
+
+                                                                                      15
+Directory entry
+
+· Directory entry is just a structure.
+
+                                             what?  Filename  Attributes Cluster #
+
+Bytes                   Description                 explorer.exe ...... 32
+ 0-0
+       1st character of the filename                          How?
+       (0x00 or 0xe5 means unallocated)
+
+1-10 7+3 characters of filename + extension.       0e     x p l o r e r7
+11-11 File attributes (e.g., read only, hidden)    8e     x e ... ... ... ... ... 15
+12-12 Reserved.                                   16 ...  ... ... ... 00 00 ... ... 23
+13-19 Creation and access time information.       24 ...  ... 20 00 00 C4 0F 00 31
+
+20-21  High 2 bytes of the first cluster address    Higher 2  Lower 2  Cluster
+       (0 for FAT16 and FAT12).                      bytes     bytes   address
+
+22-25 Written time information.                     00 00     20 00 = 8192
+
+26-27 Low 2 bytes of first cluster address.
+
+28-31 File size.                                              It is not 32, why?
+
+                                                                                    16
+Big Endian vs Little Endian
+
+· Endian-ness is about byte ordering.
+
+   ­ It means the way that a machine (we mean the entire
+      computer architecture) orders the bytes.
+
+                                               4-byte integer value:
+                                                    0x89ABCDEF
+
+Ending (small) value                               Ending (small) value
+in small address                                   in large address
+
+  Increasing address         Increasing address
+
+EF CD AB 89                  89 AB CD EF
+
+ Little                        Big
+endian                       endian
+
+                                                                         17
+Big Endian vs Little Endian
+
+· Directory entry is just a structure.
+
+                                             what?  Filename  Attributes Cluster #
+
+Bytes                   Description                 explorer.exe ...... 32
+ 0-0
+       1st character of the filename                          How?
+       (0x00 or 0xe5 means unallocated)
+
+1-10 7+3 characters of filename + extension.       0e x p l o r e r7
+                                                   8 e x e ... ... ... ... ... 15
+11-11 File attributes (e.g., read only, hidden)   16 ... ... ... ... 00 00 ... ... 23
+                                                  24 ... ... 20 00 00 C4 0F 00 31
+12-12 Reserved.
+
+13-19 Creation and access time information.
+
+       High 2 bytes of the first cluster address    Big    00 00 20 00 =    8192
+       (0 for FAT16 and FAT12).                   endian
+20-21
+
+22-25 Written time information.                    Little  00 00 00 20 =    32
+                                                  endian
+
+26-27 Low 2 bytes of first cluster address.       The FAT is defined to use little-endian byte
+28-31 File size.                                  ordering, as its original implementation was
+                                                  on the Intel x86 platform
+
+                                                                                                18
+The file size...
+
+                                             what?  Filename  Attributes Cluster #
+
+Bytes                   Description                 explorer.exe ...... 32
+ 0-0
+       1st character of the filename                          How?
+       (0x00 or 0xe5 means unallocated)
+
+1-10 7+3 characters of filename + extension.       0e x p l o r e r7
+11-11 File attributes (e.g., read only, hidden)    8 e x e ... ... ... ... ... 15
+12-12 Reserved.                                   16 ... ... ... ... 00 00 ... ... 23
+13-19 Creation and access time information.       24 ... ... 20 00 00 C4 0F 00 31
+
+20-21  High 2 bytes of the first cluster address    So, what is the largest size of a file?
+       (0 for FAT16 and FAT12).                                   4G ­ 1 bytes
+
+22-25 Written time information.
+
+26-27 Low 2 bytes of first cluster address.
+
+28-31 File size.
+
+                                                                                             19
+Directory entry
+
+· Any problem with this design?
+
+Bytes                   Description               Note. This is the 8+3 naming convention.
+ 0-0                                              8 characters for name +
+       1st character of the filename              3 characters for file extension
+       (0x00 or 0xe5 means unallocated)
+                                                  Example:
+1-10 7+3 characters of filename + extension.      How to store the file:
+                                                  "I_love_the_operating_syste
+11-11 File attributes (e.g., read only, hidden)   m_course.txt"
+
+12-12 Reserved.                                             How to store long
+                                                                 filename?
+13-19 Creation and access time information.
+
+20-21  High 2 bytes of the first cluster address
+       (0 for FAT16 and FAT12).
+
+22-25 Written time information.
+
+26-27 Low 2 bytes of first cluster address.
+
+28-31 File size.
+
+                                                                                            20
+FAT series ­ LFN directory entry
+
+· LFN: Long File Name.
+
+   ­ In FAT32, the 8+3 naming convention is removed by...
+   ­ Adding more entries to represent the filename
+
+ Directory file  Each LFN entry represents 13 characters in
+    LFN #3       Unicode, i.e., 2 bytes per character.
+    LFN #2       Yet, the sequence is upside-down!
+    LFN #1
+                   The normal directory entry is still there.
+Normal Entry
+
+                                                               21
+FAT series ­ LFN directory entry
+
+       Normal entry                                      LFN entry
+
+Bytes                   Description               Bytes            Description
+ 0-0
+       1st character of the filename              0-0 Sequence Number
+       (0x00 or 0xe5 means unallocated)
+
+1-10 7+3 characters of filename + extension.      1-10   File name characters
+                                                         (5 characters in Unicode)
+
+11-11 File attributes (e.g., read only, hidden)   11-11 File attributes - always 0x0F
+
+12-12 Reserved.                                   12-12 Reserved.
+
+13-19 Creation and access time information.       13-13 Checksum
+
+20-21  High 2 bytes of the first cluster address  14-25  File name characters
+       (0 for FAT16 and FAT12).                          (6 characters in Unicode)
+
+22-25 Written time information.                   26-27 Reserved
+
+26-27 Low 2 bytes of first cluster address.       28-31 File name characters
+                                                            (2 characters in Unicode)
+28-31 File size.
+
+                                                                                       22
+FAT series ­ LFN directory entry
+
+· Filename:
+  "I_love_the_operating_system_course.txt".
+
+        Byte 11 is always 0x0F to indicate that is a LFN.
+
+LFN #3  436d 005f 0063 006f 0075 000f 0040 7200 Cm._.c.o.u...@r.
+LFN #2  7300 6500 2e00 7400 7800 0000 7400 0000 s.e...t.x...t...
+LFN #1
+Normal  0265 0072 0061 0074 0069 000f 0040 6e00 .e.r.a.t.i...@n.
+        6700 5f00 7300 7900 7300 0000 7400 6500 g._.s.y.s...t.e.
+
+        0149 005f 006c 006f 0076 000f 0040 6500 .I._.l.o.v...@e.
+        5f00 7400 6800 6500 5f00 0000 6f00 7000 _.t.h.e._...o.p.
+
+        495f 4c4f 5645 7e31 5458 5420 0064 b99e I_LOVE~1TXT .d..
+        773d 773d 0000 b99e 773d 0000 0000 0000 w=w=....w=......
+
+                                                           23
+FAT series ­ LFN directory entry
+
+This is the sequence number, and they are                  Directory file
+arranged in descending order.              LFN #3: "m_cou" "rse.tx" "t"
+                                           LFN #2: "erati" "ng_sys" "te"
+The terminating directory entry has the    LFN #1: "I_lov" "e_the_" "op"
+sequence number OR-ed with 0x40.
+                                                         Normal Entry
+
+LFN #3  436d 005f 0063 006f 0075 000f 0040 7200 Cm._.c.o.u...@r.
+LFN #2  7300 6500 2e00 7400 7800 0000 7400 0000 s.e...t.x...t...
+LFN #1
+Normal  0265 0072 0061 0074 0069 000f 0040 6e00 .e.r.a.t.i...@n.
+        6700 5f00 7300 7900 7300 0000 7400 6500 g._.s.y.s...t.e.
+
+        0149 005f 006c 006f 0076 000f 0040 6500 .I._.l.o.v...@e.
+        5f00 7400 6800 6500 5f00 0000 6f00 7000 _.t.h.e._...o.p.
+
+        495f 4c4f 5645 7e31 5458 5420 0064 b99e I_LOVE~1TXT .d..
+        773d 773d 0000 b99e 773d 0000 0000 0000 w=w=....w=......
+
+                                                                           24
+FAT series ­ directory entry: a short summary
+
+· A directory is an extremely important part of a FAT-
+  like file system.
+
+   ­ It stores the start of the content, i.e., the start cluster
+      number.
+
+   ­ It stores the end of the content, i.e., the file size;
+      without the file size, how can you know when you
+      should stop reading a cluster?
+
+   ­ It stores all file attributes.
+
+                                                                                                                                                                             25
+Details of FAT32
+
+· Introduction
+· Directory and File Attributes
+· File Operations
+
+   ­ Read files
+
+   ­ Write files
+   ­ Delete files
+   ­ Recover deleted files
+
+                                                                                                                                                                             26
+How to read a file?
+
+       Task: read "C:\windows\explorer.exe" sequentially.
+
+Suppose we already read out the         Filename           Attributes Cluster #
+directory entry...
+                                        explorer.exe ......  32
+
+You know the process of          Step 1. Read the content from Cluster #32.
+directory traversal, right?
+
+                                 Note. The file size may also help determine if
+                                 the last cluster is reached (remember where it
+                                 is stored?)
+
+Boot    FSINFO               FAT1 FAT2    Root
+Sector                                  Directory
+
+                                                                                 27
+How to read a file?
+
+       Task: read "C:\windows\explorer.exe" sequentially.
+
+0    ...                        Filename                   Attributes Cluster #
+
+1    ...                        explorer.exe ......        32
+
+...  ...
+
+32   33
+
+33 EOF               Step 1. Read the content from Cluster #32.
+                     Note. The file size may also help determining
+34   0               if the last cluster is reached.
+
+35   0               Step 2. Look for the next cluster and it is
+                     Cluster #33 (from the FAT table)
+
+     Boot    FSINFO  FAT1 FAT2    Root
+     Sector                     Directory
+
+                                                                                 28
+How to read a file?
+
+       Task: read "C:\windows\explorer.exe" sequentially.
+
+0    ...                            Filename               Attributes Cluster #
+
+1    ...                            explorer.exe ......    32
+
+...  ...
+
+32   33
+
+33 EOF                              Step 3. Since the FAT has marked "EOF", we
+                                    have reached the last cluster.
+34   0
+                                    Note. The file size help determine how many
+35   0                              bytes to read from the last cluster.
+
+        FAT entry structure??
+  Remember: 28bits are used to
+represent cluster number for FAT32
+
+     Boot    FSINFO  FAT1 FAT2        Root
+     Sector                         Directory
+
+                                                                                 29
+How to read a file?
+
+       Task: read "C:\windows\explorer.exe" sequentially.
+
+0    ...                         Filename                  Attributes Cluster #
+
+1    ...                         explorer.exe ......       32
+
+...  ...
+
+32   33
+
+33 EOF                Step 3. Since the FAT has marked "EOF", we
+                      have reached the last cluster.
+34   0
+                      Note. The file size help determine how many
+35   0                bytes to read from the last cluster.
+
+Damaged = 0x0ffffff7
+EOF >= 0x0ffffff8
+Unallocated = 0x0
+
+     Boot    FSINFO   FAT1 FAT2    Root
+     Sector                      Directory
+
+                                                                                 30
+Details of FAT32
+
+· Introduction
+· Directory and File Attributes
+· File Operations
+
+   ­ Read files
+   ­ Write files
+   ­ Delete files
+   ­ Recover deleted files
+
+                                                                                                                                                                             31
+How to write a file?
+
+        Task: append data to "C:\windows\explorer.exe".
+
+0    ...                        Filename                 Attributes Cluster #
+
+21   E.O..F                     explorer.exe ......      32
+
+...  ...
+
+32   33
+
+33 EOF               Step 1. Locate the last cluster.
+                     Step 2. Start writing to the non-full cluster.
+34   0
+
+35   0
+
+     Boot    FSINFO  FAT1 FAT2    Root
+     Sector                     Directory
+
+                                                                               32
+How to write a file?
+
+        Task: append data to "C:\windows\explorer.exe".
+
+0    ...                              Filename           Attributes Cluster #
+
+12   E.O..F                           explorer.exe ......  32
+
+...  ...
+
+32   33
+
+33 EOF                     Step 3. Allocate the next cluster through FSINFO.
+
+34   0
+
+35   0
+
+What is stored in FSINFO?
+     How to allocate?
+
+     Boot    FSINFO        FAT1 FAT2    Root
+     Sector                           Directory
+
+                                                                               33
+How to write a file?
+
+        Task: append data to "C:\windows\explorer.exe".
+
+0    ...                           Filename              Attributes Cluster #
+
+12   E.O..F                        explorer.exe ......   32
+
+...  ...
+
+32   33
+
+33 EOF                  Step 3. Allocate the next cluster through FSINFO.
+
+34   0
+
+35   0
+
+          FSINFO
+ # of free clusters 4
+Next free cluster # 34
+
+     Boot    FSINFO     FAT1 FAT2    Root
+     Sector                        Directory
+
+                                                                               34
+How to write a file?
+
+        Task: append data to "C:\windows\explorer.exe".
+
+0    ...                           Filename              Attributes Cluster #
+
+1    ...                           explorer.exe ......   32
+
+...  ...
+
+32   33
+
+33   34                 Step 3. Allocate the next cluster through FSINFO.
+                        Step 4. Update the FATs and FSINFO.
+34   EOF                Step 5. When write finishes, update the file size.
+
+35   0
+
+          FSINFO
+ # of free clusters 3
+Next free cluster # 35
+
+     Boot    FSINFO     FAT1 FAT2    Root
+     Sector                        Directory
+
+                                                                               35
+How to write a file?
+
+        Task: append data to "C:\windows\explorer.exe".
+
+0    ...                           Filename              Attributes Cluster #
+
+1    ...                           explorer.exe ......   32
+
+...  ...
+
+32   33
+
+33   34
+
+34   EOF                Q: How to obtain the next free cluster?
+
+35   0
+
+          FSINFO
+ # of free clusters 3
+Next free cluster # 35
+
+     Boot    FSINFO     FAT1 FAT2    Root
+     Sector                        Directory
+
+                                                                               36
+How to write a file?
+
+        Task: append data to "C:\windows\explorer.exe".
+
+0    ...                           Filename              Attributes Cluster #
+
+1    ...                           explorer.exe ......    32
+
+...  ...
+
+32   33                 The search for the next free cluster is a circular,
+                        next-available search.
+33   34
+
+34   EOF                Why implementing next-available?
+                        Principle of locality
+35   0
+
+          FSINFO        Why circular?
+ # of free clusters 3   To find out every free block
+Next free cluster # 35
+
+     Boot    FSINFO     FAT1 FAT2    Root
+     Sector                        Directory
+
+                                                                               37
+Details of FAT32
+
+· Introduction
+· Directory and File Attributes
+· File Operations
+
+   ­ Read files
+   ­ Write files
+   ­ Delete files
+   ­ Recover deleted files
+
+                                                                                                                                                                             38
+How to delete a file?
+
+              Task: delete "C:\windows\explorer.exe".
+
+0    ...                        0    ...        Filename           Attributes Cluster #
+
+1    ...                        1    ...        explorer.exe ......  32
+
+...  ...                        ...  ...
+
+32   33                         32   0
+
+33   34                         33   0                  Step 1. De-allocate all the blocks
+                                                        involved. Update FSINFO and FATs.
+34   EOF                        34   0
+
+35   0                          35   0
+
+          FSINFO                          FSINFO
+ # of free clusters 3            # of free clusters 6
+Next free cluster # 35          Next free cluster # 32
+
+     Boot               FSINFO       FAT1 FAT2            Root
+     Sector                                             Directory
+
+                                                                                            39
+How to delete a file?
+
+              Task: delete "C:\windows\explorer.exe".
+                                                                       How about the directory entry
+
+                    Cluster #123
+
+        Filename    Attributes    Cluster #
+                                  ?
+        .           ......        ?
+                                  32
+        ..          ......        456
+
+        explorer.exe ......
+
+        notepad.exe ......
+
+Boot        FSINFO  FAT1 FAT2       Root
+Sector                            Directory
+
+                                                                                                      40
+How to delete a file?
+
+       Task: delete "C:\windows\explorer.exe".
+
+Bytes                   Description                       How about the directory entry
+ 0-0
+       1st character of the filename                      Step 2. Change the first byte of
+       (0x00 or 0xe5 means unallocated)                   the directory entry to 0xE5.
+
+                                 Cluster #123             LFN entries also receive the
+                                                          same treatment.
+The first character  Filename    Attributes    Cluster #
+becomes "0xE5".                                ?          That's the end of deletion!
+                     .           ......        ?
+                                               32
+                     ..          ......        456
+
+                     _xplorer.exe ......
+
+                     notepad.exe ......
+
+       Boot              FSINFO  FAT1 FAT2       Root
+       Sector                                  Directory
+
+                                                                                            41
+Really delete a file?
+
+· Can you see that: the file is not really removed
+  from the FS layout?
+
+   ­ Perform a search in all the free space. Then, you will find
+      all deleted file contents.
+
+· "Deleted data" persists until the de-allocated
+  clusters are reused.
+
+   ­ This is an issue between performance (during deletion)
+      and security.
+
+· Any way(s) to delete a file securely?
+
+                                                                                                                                                                             42
+How to delete a file "securely"?
+
+                                                                                           Mac OS X Secure Disk Erase
+
+    Brute Force?
+     http://www.ohgizmo.com/2009/06/01/manual-hard-drive-destroyer-looks-like-fun/
+    What will the research community tell you?
+    http://cdn.computerscience1.net/2006/fall/lectures/8/articles8.pdf
+
+                                                                                                                                                                             43
+Details of FAT32
+
+· Introduction
+· Directory and File Attributes
+· File Operations
+
+   ­ Read files
+   ­ Write files
+   ­ Delete files
+   ­ Recover deleted files
+
+                                                                                                                                                                             44
+How to "rescue" a deleted file?
+
+· If you're really care about the deleted file, then...
+
+   ­ PULL THE POWER PLUG AT ONCE!
+   ­ Pulling the power plug stops the target clusters from
+
+      being over-written.
+
+                                 Cluster #123             All the things are still here!
+
+                     Filename    Attributes Cluster #
+
+                     .           ...... ?
+
+                     ..          ...... ?
+
+                     _xplorer.exe ...... 32
+
+                     notepad.exe ...... 456
+
+The first character
+becomes "0xE5".
+
+Boot                     FSINFO  FAT1 FAT2       Root
+Sector                                         Directory
+
+                                                                                          45
+How to "rescue" a deleted file?
+
+· If you're really care about the deleted file, then...
+
+   ­ PULL THE POWER PLUG AT ONCE!
+   ­ Pulling the power plug stops the target clusters from
+
+      being over-written.
+
+Principle of "rescue" deleted file
+
+Data persists unless the sectors are reallocated and overwritten.
+
+File size <= 1  Because the first cluster address is still readable, the recovery is having a
+cluster         very high successful rate.
+
+                Note that filenames with the same postfix may also be found.
+
+                                                                                               46
+How to "rescue" a deleted file?
+
+· If you're really care about the deleted file, then...
+
+   ­ PULL THE POWER PLUG AT ONCE!
+   ­ Pulling the power plug stops the target clusters from
+
+      being over-written.
+
+Principle of "rescue" deleted file
+
+Data persists unless the sectors are reallocated and overwritten.
+
+               It is still possible as the clusters of a file are likely to be contiguously
+               allocated.
+
+File size > 1  The next-available search provides a hint in looking for deleted blocks.
+cluster
+               If not, you'd better have the checksum and the exact file size beforehand,
+               so that you can use a brute-force method to recover the file.
+
+                                                                                             47
+How to "rescue" a deleted file?
+
+· What if the value of the 32nd cluster is not 0?
+
+It is hard to find them
+
+out without some hints. 0     ...        _xplorer.exe ...... 32
+
+                         1    ...             The first cluster is the one
+                                              that we can be sure of...
+The use of checksum      ...  ...
+may be a good hint...
+                         32   0
+
+                         33   0
+
+                         34   0
+
+                         35   0
+
+Boot    FSINFO                FAT1 FAT2    Root
+Sector                                   Directory
+
+                                                                            48
+FAT series ­ conclusion
+
+· It is a "nice" file system:
+
+   ­ Space efficient: 4 bytes overhead (FAT entry) per data
+      cluster.
+
+· Deletion problem:
+
+   ­ This is a lazy yet fast implementation.
+   ­ Need extra protection for deleted data.
+
+· Deployment:
+
+   ­ It is everywhere: SD cards, USB drives, disks...
+
+                                                                                                                                                                             49
+

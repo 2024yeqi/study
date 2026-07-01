@@ -1,0 +1,1372 @@
+Operating Systems
+
+Prof. Yongkun Li
+- 
+http://staff.ustc.edu.cn/~ykli
+
+                         Ch3 - Process Operations
+
+                                                    -from kernel's perspective
+Process in Memory
+
+                                                     User space
+
+            Global   Dynamically-    Code +
+           variable    allocated   constants
+                         memory
+           Local
+         variable
+
+Process                        Invoking system
+                               calls. E.g., fork(),
+                               exec*(), wait().
+
+          Process    Access        Kernel code
+         structure   process'      with system
+                     internal
+            (PCB)                      calls
+
+                                              Kernel Space
+
+                                                                             2
+Kernel-space VS User-space
+
+                            System Memory
+
+                                User-space
+                                 memory
+
+                            Kernel-space
+                              memory
+
+                                                             3
+Kernel-space VS User-space
+
+                Kernel-space memory User-space memory  System Memory
+
+Storing                                                    User-space
+ what                                                       memory
+
+Accessed
+by whom
+
+                                                       Kernel-space
+                                                         memory
+
+                                                                                        4
+Kernel-space VS User-space
+
+          Kernel-space memory User-space memory       System Memory
+
+Storing   Kernel data structure   Process' memory         User-space
+ what          Kernel code       Program code of the       memory
+              Device drivers
+                                        process
+
+Accessed
+by whom
+
+                                                      Kernel-space
+                                                        memory
+
+                                                                      5
+Kernel-space VS User-space
+
+          Kernel-space memory User-space memory       System Memory
+
+Storing   Kernel data structure   Process' memory.        User-space
+ what          Kernel code       Program code of the       memory
+              Device drivers
+                                        process
+
+Accessed  Kernel code            User program code +
+by whom                                kernel code
+
+          The kernel is invincible!                   Kernel-space
+                                                        memory
+
+                                                                                       6
+Process is going back and forth...     System Memory
+
+· A process will switch its execution      User-space
+  from user space to kernel space           memory
+
+· How?
+
+   ­ through invoking system call
+
+                                       Kernel-space
+                                         memory
+
+                                                                        7
+Process is going back and forth...                                                    System Memory
+                                                                                          User-space
+· Example                                                                                  memory
+   ­ Say, the CPU is running a program
+      code of a process                                                                 Kernel-space
+   ­ Where is the code?                                                                    memory
+
+         · User-space memory                                                                                               8
+         · Recall the process structure in memory
+
+   ­ Where should the program counter
+      point to?
+
+                                                                            Program
+                                                                             counter
+Process is going back and forth...                 System Memory
+
+· What happens...                                      User-space
+                                                        memory
+    ­ When the process is calling the system call
+       "getpid()"
+
+· Where to get the PID
+
+    ­ PCB (in kernel-space memory)
+
+· The CPU switches from the user-space to
+  the kernel-space, and reads the PID
+
+Program                                            Kernel-space
+counter                                              memory
+
+                                                                                    9
+Process is going back and forth...        System Memory
+
+· After finished executing getpid()           User-space
+                                               memory
+   ­ What happens?
+   ­ CPU switches back to the user-space
+
+      memory, and continues running that
+      program code
+
+Program                                   Kernel-space
+counter                                     memory
+
+                                                                         10
+User Mode & Kernel Mode
+
+· Remember this?
+
+         Another question: How much time was spent in each part?
+
+                                                                                                                                                                             11
+User time VS System time
+
+· So, not just the memory, but also the execution of a
+  process is also divided into two parts.
+
+   ­ User time and system time
+
+                                                                                                                                                                             12
+User time VS System time
+
+· So, not just the memory, but also the execution of a
+  process is also divided into two parts.
+
+   ­ User time and system time
+
+calling system call.      Some system calls may take a long time.
+ e.g., getpid()           E.g., accessing a floppy drive.
+
+                                                                   User time ­
+                                                                   Time spent on codes in
+                                                                   user-space memory.
+
+                                                                   System time ­
+                                                                   Time spent on codes in
+                                                                   kernel-space memory.
+
+Read information and      Total running time = user time + system time.
+the system call returns.
+
+                                                                                           13
+User time VS System time ­ example 1
+
+· Let's tell the difference...with the tool "time".
+
+$ time ./time_example  Time elapsed when "./time_example"
+                       terminates.
+real  0m0.003s
+user  0m0.003s         The user time of "./time_example" measured
+sys   0m0.000s         when the process is on CPU.
+$_
+                       The system time of "./time_example" measured
+                       when the process is on CPU.
+
+                       int main(void) {
+
+                          int x = 0;
+
+                          for(i = 1; i <= 100000; i++) {
+
+                          x = x + i;
+
+Why comment               // printf("x = %d\n", x);
+this line???
+                          }              Commented on purpose.
+                          return 0;
+
+                       }
+
+                                                                     14
+User time VS System time ­ example 1
+
+· Let's tell the difference...with the tool "time".
+
+$ time ./time_example  int main(void) {
+                             int x = 0;
+real  0m0.003s               for(i = 1; i <= 100000; i++) {
+user  0m0.003s                      x = x + i;
+sys   0m0.000s               // printf("x = %d\n", x);
+$_                           }
+
+                            return 0; Commented on purpose.
+
+                       }
+
+$ time ./time_example  int main(void) {
+                             int x = 0;
+real  0m0.677s               for(i = 1; i <= 100000; i++) {
+user  0m0.032s                      x = x + i;
+sys   0m0.227s                      printf("x = %d\n", x);
+$_                           }
+
+                            return 0; Comment released.
+
+                       }
+
+See? Accessing hardware costs the process more time.
+
+                                                                                                                                                                 15
+User time VS System time ­ example 2
+
+· What is the difference of the two programs?
+
+#define MAX 1000000             #define MAX 1000000
+
+int main(void) {                int main(void) {
+      int i;                          int i;
+      for(i = 0; i < MAX; i++)        for(i = 0; i < MAX / 5 ; i++)
+             printf("x\n");                  printf("x\nx\nx\nx\nx\n");
+      return 0;                       return 0;
+
+}                               }
+
+Lessons learned: When writing a program, you must
+consider both the user time and the system time
+
+                                                                         16
+User time VS System time ­ short summary
+
+· The user time and the system time together define
+  the performance of an application
+
+   ­ System call plays a major role in performance.
+   ­ Blocking system call: some system calls even stop your
+
+      process until the data is available.
+
+· Programmers should pay attention to system
+  performance
+
+   ­ Reading a file byte-by-byte
+   ­ Reading a file block-by-block, where the size of a block is
+
+      4,096 bytes
+
+                                                                                                                                                                             17
+Story so far...
+
+    User space and Kernel space
+    User time and system time
+
+                                                                              PrPorcoecsesss
+
+                                                                                                                                                                             18
+Next...
+
+   Working of system calls
+      - fork();
+      - exec*();
+      - wait() + exit();
+
+                                                                              PrPorcoecsesss
+
+                                                                                                                                                                             19
+Next...
+
+   Working of system calls
+      - fork();
+      - exec*();
+      - wait() + exit();
+
+                                                                              PrPorcoecsesss
+
+                                                                                                                                                                             20
+fork()
+
+· From a programmer's view, fork() behaves like
+  the following:
+
+                                                                                                                                                                             21
+fork()
+
+· From a programmer's view, fork() behaves like
+  the following:
+
+   The process splits into two!  fork() is called.
+                                                      fork() returns.
+Original execution flow                                                      new process
+of a process
+
+   The process                   What is doing here?
+invokes fork().                                  kernel is fork()-ing
+
+  Flow of original process                    The kernel is doing something
+  Flow of newly-created process               secret. What are those things?
+
+                                                                                          22
+fork()
+
+· From the Kernel's view...
+             Guess: What will be modified?
+
+                                                                                                                                                                             23
+Process creation ­ fork() system call Recall
+
+· fork() behaves like "cell division".
+
+   ­ It creates the child process by cloning from the parent
+      process, including...
+
+Cloned items         Descriptions
+Program counter      That's why they both execute from the same line of code after
+[CPU register]       fork() returns.
+Program code         They are sharing the same piece of code.
+[File & Memory]
+Memory               Including local variables, global variables, and dynamically
+                     allocated memory.
+Opened files         If the parent has opened a file "A", then the child will also have
+[Kernel's internal]  file "A" opened automatically.
+
+                                                                                         24
+Process creation ­ fork() system call Recall
+
+· However...
+
+   ­ fork() does not clone the following...
+   ­ Note: they are all data inside the memory of kernel.
+
+Distinct items  Parent                            Child
+
+Return value of fork() PID of the child process.  0
+
+PID             Unchanged.                        Different, not necessarily be
+                                                  "Parent PID + 1"
+Parent process  Unchanged.
+                                                  Doesn't have the same parent
+Running time    Cumulated.                        as that of the parent process.
+
+                                                  Just created, so should be 0.
+
+                                                                                  25
+fork() in action ­ the start...
+
+                                 OS Kernel
+
+Process  Process
+  1234      345
+
+Inside kernel, processes are arranged as a
+doubly linked list, called the task list.
+Q: What is each node?
+
+                                            26
+fork() in action ­ the start...
+
+This guy invoked  Process                    OS Kernel
+    fork().          345
+                                    Inside kernel, processes are
+        Process                     arranged as a doubly linked
+           1234                     list, called the task list.
+                                    Q: What is each node?
+
+         PID = 1234        copying           PID = 1234
+       Running time                        Running time
+Array of opened files               Array of opened files
+
+                                                                  27
+fork() in action ­ kernel-space update
+
+This guy invoked           OS Kernel
+    fork().
+                  Process
+        Process      345
+           1234
+
+         PID = 1234        PID = 1235    updated.
+       Running time
+Array of opened files      Running time  reset to 0.
+
+                           Array of opened files preserved.
+
+                                                             28
+fork() in action ­ kernel-space update
+
+This guy invoked                  OS Kernel
+    fork().
+                  Process
+        Process      345
+           1234
+
+                    PID = 1234    PID = 1235    updated.
+                  Running time
+           Array of opened files  Running time  reset to 0.
+
+                                  Array of opened files preserved.
+
+Add a new  List of children       Pointer to my parent updated.
+   child.
+
+                                                                    29
+fork() in action ­ kernel-space update
+
+This guy invoked                  A new node is  OS Kernel
+    fork().                        introduced.
+
+        Process   Process         Process
+           1234      345            1235
+
+                    PID = 1234             PID = 1235  updated.
+                  Running time
+           Array of opened files  Running time         reset to 0.
+
+                                  Array of opened files preserved.
+
+Add a new  List of children       Pointer to my parent updated.
+   child.
+
+                                                                    30
+fork() in action ­ user-space update
+
+This guy invoked                    OS Kernel
+    fork().
+                  Process  Process
+        Process      345     1235
+           1234
+
+                           What happened
+                           to user space?
+
+                                                                                           31
+fork() in action ­ user-space update
+
+This guy invoked                              OS Kernel
+    fork().
+                  Process            Process
+        Process      345               1235
+           1234
+
+  Local           Dynamically-       What happened
+variable            allocated        to user space?
+                      memory
+ Global                                                                                              32
+variable                    Code +
+                          constants
+fork() in action ­ user-space update
+
+This guy invoked                                   OS Kernel
+    fork().
+                  Process                Process
+        Process      345                   1235
+           1234
+
+  Local           Dynamically-  copying    Local   Dynamically-
+variable            allocated            variable    allocated
+                      memory                           memory
+ Global                                   Global
+variable            Code +               variable            Code +
+                  constants                                constants
+
+                                                                      33
+fork() in action ­ finish
+
+Ready to return            Ready to return  OS Kernel
+ from fork()                from fork()
+
+        Process  Process   Process
+          1234      345      1235
+
+         PID = 1234                 PID = 1235
+       Running time               Running time
+Array of opened files      Array of opened files
+    List of children       Pointer to my parent
+                               Return value = 0
+ Return value = 1235
+                                                                                             34
+fork() in action ­ array of opened files?
+
+· After fork()
+
+   ­ The child process share a set of opened files
+
+· What are the array of opened files?
+
+                                                                                                                                                                             35
+fork() in action ­ array of opened files?
+
+· Array of opened files contains:
+
+Array Index  Description
+
+0            Standard Input Stream; FILE *stdin;
+
+1            Standard Output Stream; FILE *stdout;
+
+2            Standard Error Stream; FILE *stderr;
+
+3 or beyond  Storing the files you opened, e.g., fopen(), open(), etc.
+
+­ That's why a parent process shares the same terminal
+  output stream as the child process!
+
+                                                                        36
+Working of system calls
+   - fork();
+   - exec*();
+
+                                                                      Process
+
+                                                                                                                                                                 37
+exec*()
+
+· How about the exec*() call family?
+
+    e.g., execl("/bin/ls", "/bin/ls", NULL);
+
+               exec*() is called.
+
+                                   The process returns to user-space
+                                   but is executing another program.
+
+Old   New
+code  code
+
+      Process                      The kernel is doing something
+                                   secret. What are those things?
+
+                                                                                                         38
+exec*() in action ­ the start...
+
+This guy invoked  Process                  OS Kernel
+   exec*().          345
+                           The kernel searches the target
+        Process            program file.
+           1234
+                           If it is not found, the process returns
+                           from the system call.
+
+         PID = 1234                   Let's assume that it can be found.
+       Running time        Searching
+Array of opened files
+
+                                                                          39
+exec*() in action ­ the end
+
+This guy invoked                     OS Kernel
+   exec*().
+                  Process
+        Process      345
+           1234
+
+  Local           Dynamically-       What happens to the
+variable            allocated        user-space memory
+                      memory
+ Global
+variable                    Code +
+                          constants
+
+                                                          40
+exec*() in action ­ the end
+
+This guy invoked                                   OS Kernel
+   exec*().
+                         Process
+        Process             345
+           1234
+
+Cleared! Local           Dynamically-
+               variable
+                           allocated Cleared!
+                             memory
+
+Reset based   Global       Code +   Changed to
+on the new   variable    constants  the new
+code!                               program code!
+
+                                                              41
+exec*() in action ­ the end
+
+This guy invoked                     OS Kernel
+   exec*().
+                  Process
+        Process      345
+           1234
+
+  Local           Dynamically-       The kernel code updates the
+variable            allocated        content on the user-space memory.
+                      memory
+ Global                              Also, registers' values, such as the
+variable                    Code +   program counter, will also be reset.
+                          constants
+
+                                                                           42
+Working of system calls
+   - fork();
+   - exec*();
+   - wait() + exit();
+
+                         Process
+
+Process
+
+                                  43
+Recall the example
+
+1 int system_test(const char *cmd_str) {
+
+2     if(cmd_str == -1)
+
+3        return -1;
+
+4     if(fork() == 0) {                             The parent is
+                                                    suspended until
+5        execl("/bin/sh", "/bin/sh",                the child
+                                                    terminates
+                 "-c", cmd_str, NULL);
+                                               $ ./system_implement_2
+6        fprintf(stderr,                       before...
+
+         "%s: command not found\n", cmd_str);  system_implement_2
+                                               System_implement_2.c
+7        exit(-1);
+                                               after...
+8     }                                        $_
+
+9     wait(NULL);
+
+10    return 0;
+
+11 }
+
+12
+
+13 int main(void) {
+
+14    printf("before...\n\n");
+
+15    system_test("/bin/ls");
+
+16    printf("\nafter...\n");
+
+17    return 0;
+
+18 }
+
+                                                                       44
+wait()
+· wait() system call
+
+   ­ Suspend the parent process
+   ­ Wake up when one child process terminates
+
+· How to terminate the child process
+
+   ­ Through the exit() system call
+
+· wait() and exit() ­ they come together!
+
+                                                                                                                                                                             45
+wait() and exit() ­ Time Analysis
+
+                 wait()                  wait()
+                 is called.              returns.
+
+                             wait()
+                             blocks the
+                             parent.
+
+Parent   Parent                                    Of course, the kernel
+Process   Child                                    coordinates the
+                                                   series of events. But,
+ Child                                             what on earth is
+Process                                            going on?
+
+                 Child is terminated through
+                 the exit() system call.
+
+                                                   46
+Guess...
+
+· What is going on inside kernel?
+
+   ­ Child: exit()
+
+         · Process data + PCB
+
+   ­ Parent: wait()
+
+         · Process data + PCB
+
+                                                                                                                                                                             47
+wait() and exit() ­ child side
+
+                                    OS Kernel
+
+Parent                       Child
+
+     Process  Process
+        1234    1235
+
+                                               48
+wait() and exit() ­ child side
+
+This guy invoked                     OS Kernel
+    exit().
+
+Parent                       Child
+
+     Process  Process
+        1234    1235
+
+                       PID = 1235    What changes will be made
+                     Running time    for the PCB?
+              Array of opened files
+
+                                                                49
+wait() and exit() ­ child side
+
+This guy invoked                     OS Kernel
+    exit().
+
+Parent                       Child
+
+     Process  Process
+        1234    1235
+
+                       PID = 1235    The kernel frees all the
+                     Running time    allocated memory.
+              Array of opened files
+                                     E.g., the list of opened files
+                                     are all closed.
+
+                                     That's why not calling fclose()
+                                     before exit() may be safe...
+
+                                                                      50
+wait() and exit() ­ child side
+
+This guy invoked                                      OS Kernel
+    exit().
+                                              Then, the kernel removes
+Parent                                 Child  everything on the user-
+                                              space memory about the
+     Process            Process               concerned process,
+        1234              1235                including program code
+                                              and allocated memory.
+                Local   Dynamically-
+              variable    allocated           Remember that kernel is
+                            memory            invincible
+               Global
+              variable            Code +
+                                constants
+
+                                                                        51
+wait() and exit() ­ child side
+
+This guy invoked                              OS Kernel
+    exit().
+
+Parent                                 Child
+
+     Process            Process
+        1234              1235
+
+ What is next?
+
+How about permanently removing the child?
+
+                Local   Dynamically-
+              variable    allocated
+                            memory
+
+               Global     Code +
+              variable  constants
+
+                                                         52
+wait() and exit() ­ child side
+
+                                OS Kernel
+
+Parent
+
+     Process
+        1234
+
+Removed from the process table immediately?
+Not really! Why?
+
+                                             53
+wait() and exit() ­ child side
+
+This guy invoked                     OS Kernel
+    exit().
+
+Parent                       Child
+
+     Process  Process
+        1234    1235
+
+                       PID = 1235    Remain the entry of the
+                     Running time    child in the process table
+              Array of opened files
+                                         (terminated state)
+
+                                             Resources?
+                                             Deallocate
+
+                                                                 54
+wait() and exit() ­ child side
+
+This guy invoked                     OS Kernel
+    exit().
+
+Parent                       Child
+
+     Process  Process
+        1234    1235
+
+                       PID = 1235    The child is now called zombie.
+                     Running time
+              Array of opened files  Its storage in the kernel-space
+                                     memory is kept to a minimum
+
+                                     The PID (1235 in this example)
+                                     and process structure are
+                                     owned by the child
+
+                                                                      55
+wait() and exit() ­ child side
+
+This guy invoked                                          OS Kernel
+    exit().
+                                             How to wake up parent?
+        Parent                       Child
+                                             The kernel notifies the parent of
+             Process  Process                the child process about the
+               1234     1235                 termination of its child.
+                                             The notification is a signal called
+SIGCHLD                                      SIGCHLD.
+
+                               PID = 1235
+                             Running time
+                      Array of opened files
+
+                                                                                  56
+Signal
+
+· What is signal?
+
+    ­ A software interrupt
+    ­ It takes steps as in the hardware interrupt
+
+· Two kinds of signals
+
+    ­ Generated from user space
+
+          · Ctrl+C, kill() system call, etc.
+
+    ­ Generated from kernel and CPU
+
+          · Segmentation fault (SIGSEGV), Floating point exception (SIGFPE), child
+             process termination (SIGCHLD), etc.
+
+· Signal is very hard to master, will be skipped in this course
+
+    ­ Reference: Advanced Programming Environment in UNIX
+    ­ Linux manpage
+
+                                                                                                                                                                             57
+A short summary for exit()
+
+Step (1) Clean up most of the allocated kernel-space memory.
+Step (2) Clean up all user-space memory.
+Step (3) Notify the parent with SIGCHLD.
+
+exit() is  exit()    Although the child is still in the
+called.    returns.  system, it is no longer running.
+                     There is no program code!!!
+
+                     It turns into a mindless zombie...
+
+(1) (2) (3)          You cannot kill a zombie process, as it is
+                     already dead. Then how to eliminate it?
+
+                                                                 58
+wait() and exit() ­ they come together!
+
+How to proceed          wait()                  wait()    Now, it is trivial to
+with wait()?            is called.              returns.  see that SIGCHLD
+                                                          signal is the trick!
+                                    wait()
+                                    blocks the            But, how to
+                                    parent.               handle SIGCHLD?
+
+Parent          Parent
+Process
+
+                                                SIGCHLD
+
+ Child          Child
+Process
+
+                        Child is terminated through
+                        the exit() system call.
+
+                                                                                 59
+wait() and exit() ­ parent side
+
+This guy invoked             How to handle SIGCHLD? OS Kernel
+    wait().
+                                      Child
+Parent
+                       Process
+      Process            1235
+         1234
+
+         PID = 1234    The kernel sets a signal handling routine
+       Running time    (and it is a function pointer) to the process.
+Array of opened files
+     Signal handlers   That signal handling routine will be executed
+                       when SIGCHLD comes.
+
+                       When SIGCHLD comes, please handle it.
+
+                                                                       60
+wait() and exit() ­ parent side
+
+This guy invoked                             OS Kernel
+    wait().
+                                      Child
+Parent
+                       Process
+      Process            1235
+         1234
+
+         PID = 1234    By default, every process does not respond
+       Running time    to the SIGCHLD signal (the signal handlers
+Array of opened files  are set only when wait() is called).
+     Signal handlers
+                       What if the parent is executing other tasks
+                       (not call the wait() system call) when child
+                       terminates (see the 2nd case of wait() later)?
+
+                                                                       61
+wait() and exit() ­ parent side
+
+This guy invoked                             OS Kernel
+    wait().
+                                      Child
+Parent
+                       Process
+      Process            1235
+         1234
+
+         PID = 1234    The kernel set the process to be sleeping.
+       Running time    The formal way to say: the wait() system
+Array of opened files  call blocks the process until ...
+     Signal handlers
+                       Guess: when to wake up?
+
+                                                                                                                  62
+wait() and exit() ­ parent side
+
+This guy invoked                             OS Kernel
+    wait().
+                                      Child
+Parent
+                       Process
+      Process            1235
+         1234
+
+         PID = 1234    SIGCHLD
+       Running time      from
+Array of opened files    1235
+     Signal handlers
+
+                                                        63
+wait() and exit() ­ parent side
+
+This guy invoked                             OS Kernel
+    wait().
+                                      Child
+Parent
+                       Process
+      Process            1235
+         1234
+
+         PID = 1234    SIGCHLD               When SIGCHLD comes, the signal
+       Running time      from                handling routine is invoked!
+Array of opened files    1235
+     Signal handlers                         Note: since the parent is still inside
+                                             the system call, instead of the
+                                             original program code, the parent
+                                             process is still blocked in some
+                                             sense...
+
+                                                                                     64
+wait() and exit() ­ parent side
+
+This guy invoked                        Now, the child is truly  OS Kernel
+    wait().                             dead.
+
+Parent                                Child
+
+      Process          Process
+         1234            1235
+
+         PID = 1234    SIGCHLD  Default Handling of SIGCHLD
+       Running time      from
+Array of opened files    1235   1. Accept and remove the
+     Signal handlers                SIGCHLD;
+
+                                2. Destroy the child process
+                                    that sends her the signal.
+
+                                                                            65
+wait() and exit() ­ parent side
+
+  Ready to return                                 OS Kernel
+   from wait().
+                       The signal handler is then removed, i.e., the
+   Parent              process is ignoring SIGCHLD again.
+                       It returns to the previously-executing code,
+        Process        going back to the user space.
+          1234         So, it looks like "wait() is returned from its
+                       invocation".
+         PID = 1234
+       Running time    This is the reason why wait() system call waits
+Array of opened files  for any one of the child processes.
+     Signal handlers
+
+                                                                        66
+wait() and exit() ­ parent side
+
+Ready to return                  OS Kernel
+from wait().
+
+Parent
+
+      Process
+        1234
+
+         PID = 1234    Lastly, the return value of wait() system call is
+       Running time    the PID of the terminated child.
+Array of opened files
+ Return value = 1235
+
+                                                                          67
+wait() and exit() ­ parent side
+
+                 wait()                  wait()
+                 is called.              returns.
+
+                             wait()
+                             blocks the
+                             parent.
+
+Parent   Parent
+Process
+                                         SIGCHLD
+ Child
+Process  Child                                     So, the child will be
+                                                   given a clean death
+                 Child is terminated through       by the wait()
+                 the exit() system call.           system call.
+
+                                                                          68
+Is it done?
+
+· How about wait()is called after the child already
+  terminated?
+
+   ­ Remember the case 2 (which is safe)
+
+wait() wake up                    wait()
+
+                      Parent is                     no suspension
+                      suspended.                    is needed.
+
+fork()  Terminate                 fork() Terminate  Case 2.
+
+                         Case 1.
+
+                                                                   69
+wait() and exit() ­ parent side
+
+Case 2.         Parent     What is going on inside the kernel?
+                 Child
+        Parent                                               wait()
+       Process                                               is called.
+
+         Child                                        SIGCHLD
+       Process
+                        Child is terminated through
+                        the exit() system call.
+
+                                                                         70
+wait() and exit() ­ parent side
+
+                                             OS Kernel
+
+Parent                                Child
+
+     Process           Process
+        1234             1235
+
+         PID = 1234    SIGCHLD
+       Running time      from
+Array of opened files    1235
+
+                               Child was already terminated (became a
+                               zombie), SIGCHLD is also sent to parent before
+
+                                                                               71
+wait() and exit() ­ parent side
+
+This guy invoked                             OS Kernel
+    wait().
+
+Parent                                Child
+
+     Process           Process
+        1234             1235
+
+         PID = 1234    SIGCHLD               Similar to Case 1, the kernel sets the
+       Running time      from                signal handling routine...
+Array of opened files    1235
+     Signal handlers                         Nevertheless, the wait() system call
+                                             finds that the SIGCHLD signal is
+                                             already there.
+
+                                             So, default actions are then taken
+                                             immediately.
+
+                                                                                     72
+wait() and exit() ­ parent side
+
+Case 2.                 The parent will experience a
+                        negligible amount of
+        Parent          blocking period.
+       Process
+                                                      wait() returns.
+         Child
+       Process          wait() is called.
+
+                Parent
+
+                        SIGCHLD
+
+                Child
+
+                        Child is terminated through   The zombie can exist up
+                        the exit() system call.       to the moment that the
+                                                      parent process calls
+                                                      wait().
+
+                                                                               73
+Orphans (zombies)
+
+· What would happen if a parent did not invoke
+  wait() and terminated?
+
+   ­ Remember the reparent operation in Linux?
+
+· init is the new parent, and it periodically invokes
+  wait()
+
+                                                                                                                                                                             74
+wait() and exit() ­ short summary
+
+· A process is turned into a zombie when...
+
+   ­ The process calls exit().
+   ­ The process returns from main().
+   ­ The process terminates abnormally.
+
+         · You know, the kernel knows that the process is terminated
+           abnormally. Hence, the kernel invokes exit() by itself.
+
+· Remember why exec*() does not return to its
+  calling process in previous example...
+
+                                                                                                                                                                             75
+wait() and exit() ­ short summary
+
+· wait() is to reap zombie child processes
+
+   ­ You should never leave any zombies in the system.
+
+· Linux will label zombie processes as "<defunct>".
+
+   ­ To look for them: ps aux | grep defunct
+
+· Learn waitpid() by yourself...
+
+                                                                                                                                                                             76
+wait() and exit() ­ Example
+
+1 int main(void)
+
+2{
+
+3     int pid;
+
+4     if( (pid = fork()) ) {
+
+5        printf("Look at the status of the process %d\n", pid);
+
+6        while( getchar() != '\n' );
+
+7        wait(NULL);
+
+8        printf("Look again!\n");
+
+9        while( getchar() != '\n' );
+
+10    }
+
+11    return 0;
+
+12 }
+
+                              What is the purpose of this program?
+
+                                                                    77
+wait() and exit() ­ Example
+
+1 int main(void)
+
+2{
+
+3     int pid;
+
+4     if( (pid = fork()) ) {
+
+5        printf("Look at the status of the process %d\n", pid);
+
+6        while( getchar() != '\n' );
+
+7        wait(NULL);
+
+8        printf("Look again!\n");
+
+9        while( getchar() != '\n' );
+
+10    }
+
+11    return 0;
+
+12 }
+
+                              This program requires you to type "enter" twice
+
+                              before the process terminates.
+
+                              You are expected to see the status of the child
+                              process changes between the 1st and the 2nd
+                              "enter".
+
+                                                                               78
+Working of system calls
+   - fork();
+   - exec*();
+   - wait() + exit();
+   - importance/fun in knowing
+      the above things?
+
+                                                                                                                                                                       79
+The role of wait() in the OS...
+
+· Why calling wait() is important
+
+   ­ It is not about process execution/suspension...
+   ­ It is about system resource management.
+
+· Think about it:
+
+   ­ A zombie takes up a PID;
+   ­ The total number of PIDs are limited;
+
+         · Read the limit: "cat /proc/sys/kernel/pid_max"
+
+   ­ What will happen if we don't clean up the zombies?
+
+                                                                                                                                                                             80
+When wait() is absent...
+
+· What is the result of this program?
+
+   ­ Do not try to know the result by running it
+
+              int main(void) {
+                     while( fork() );
+                     return 0;
+
+              }
+
+        Think about what will be
+        happened to both parent
+        and child processes?
+
+                                                                                                                                                                             81
+When wait() is absent...
+
+· Don't try this...
+
+ int main(void) {            Parent  Turn into zombie
+       while( fork() );                immediately!
+       return 0;
+                                     CChiChldihldild
+ }
+                             fork()
+Parent: never reach here.
+                             An infinite, zombie factory!
+Child: reached immediately,
+but no corresponding wait()
+for the parent (ZOMBIE)
+
+                                                           82
+Summary
+
+· Process concept
+
+   ­ Process vs program
+   ­ User-space memory + PCB
+
+· Process operations
+
+   ­ Creation, program execution, termination
+   ­ The internal workings of
+
+         · fork()
+         · exec*()
+         · wait()+exit(): come together
+
+· Calling wait() is important
+
+                                                                                                                                                                             83
+

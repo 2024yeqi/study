@@ -1,0 +1,847 @@
+Operating Systems
+
+Prof. Yongkun Li
+- 
+http://staff.ustc.edu.cn/~ykli
+
+                                   Chapter 9, part 1
+     File Systems ­ Programmer's Perspective
+Story so far...
+
+User Space                             Processes
+
+Operating System      File system      File System Operations
+       Kernel      Implementation
+
+                    FAT32, EXT2/3
+                  KV, Distributed FS,
+
+                   Graph System...
+
+Devices
+
+                                                                                                                                                                               2
+Outline
+
+· File system introduction
+· What are stored on a storage device?
+
+   ­ File
+   ­ Directory
+   ­ Interfaces/Operations
+
+                                                                                                                                                                               3
+File system introduction
+
+                                                                                                                                                   4
+Introduction                              Process A
+                                  FS Operations
+         User space
+         Operating System Kernel
+
+   Devices
+
+ To understand what a file system (FS) is, we follow
+  two different, but related directions:
+  - Layout & Operations.
+
+                                                                                                                                                                 5
+Introduction                              Process A
+                                  FS Operations
+         User space
+         Operating System Kernel
+
+                 The layout.
+              Devices
+
+Every FS has an unique layout on the
+storage device. The layout defines:
+- What are the things stored in the device.
+- Where the stored things are.
+
+                                                                                                                    6
+Introduction                              Process A
+                                  FS Operations
+         User space
+         Operating System Kernel
+
+  The layout.
+Devices
+
+               The set of FS operations defines how the OS
+               should work with the FS layout.
+
+               In other words, OS knows the FS layout
+               and works with that layout.
+
+                                                                                                                                 7
+Introduction                              Process A
+                                  FS Operations
+         User space
+         Operating System Kernel
+
+                 The layout.
+              Devices
+
+The process uses system calls, which
+then invoke the FS operations, to access
+the storage device.
+
+                                                                                                                8
+Introduction
+
+Process             fopen() fread() fwrite() fclose()  Library Calls
+
+                    open() read() write() close()      System Calls
+
+Kernel
+
+           NTFS-      Ext4-     FAT32-    ISO9660-       Kernel
+          specific   specific   specific   specific    Functions
+         functions  functions  functions  functions
+
+Devices
+
+                                                                                                                                                                      9
+Summary
+
+  · Ask yourself:
+
+      ­ OS = FS?
+      ­ Correct answer: OS  FS
+      ­ An OS supports a FS
+
+                 · An OS can support more than one FS.
+                 · A FS can be read by more than one OS.
+
+                                                                                                                                                                             10
+Summary
+
+   · Ask yourself:
+
+       ­ Storage Device = FS?
+       ­ Correct answer: Storage Device  FS.
+
+          · A FS must be stored on a device.
+
+                  ­ But, a device may or may not contain any FS.
+                  ­ Some storage devices can host more than one FS.
+
+          · A storage device is only a dummy container.
+
+                  ­ It doesn't know and doesn't need to know what
+                     FS-es are stored inside it.
+
+                  ­ The OS instructs the storage device how the data
+                     should be stored.
+
+                                                                                                                                                                             11
+Outline of topics
+
+   · There are two basic things that are
+     stored inside a storage device, and are
+     common to all existing file systems.
+
+          What are they?
+
+          ­ They are Files and Directories.
+          ­ We will learn what they are and some
+
+            basic operations of them.
+
+                                                                                                                                                                             12
+Outline of topics
+
+   · There are two basic things that are
+     stored inside a storage device, and are
+     common to all existing file systems.
+
+        How does a FS store data into the disk?
+        ­ That is, the layout of file systems.
+
+        ­ The layout affects many things:
+
+              · The speed in operating on the file systems;
+              · The reliability in using the file systems;
+              · The allocation and de-allocation of disk spaces.
+
+                                                                                                                                                                             13
+Outline of topics
+
+   · Other topics
+
+        ­ We will look into the details of FAT32 and
+          Ext2/3 file systems.
+
+        ­ Case studies: key-value systems, distributed
+          file systems, graph storage systems
+
+                                                                                                                                                                             14
+Part1: FS ­ Programmer Perspective
+   - File
+   - Directory
+   - Operations
+
+                                                                                                                                                                            15
+File
+
+  · Why do we need files?
+
+       ­ Storing information in memory is good because
+          memory is fast.
+
+       ­ However, memory vanishes after process termination.
+
+          ­ File provides a long-term information storage.
+
+                  · It is persistent and survives after process termination.
+
+          ­ File is also a shared object for processes to access
+             concurrently.
+
+                                                                                                                                                                             16
+File
+
+  · What is a file?
+
+       ­ A uniform logical view of stored information
+          provided by OS.
+
+       ­ OS perspective: A file is a logical storage unit (a
+          sequence of logical records), it is an abstract data type
+
+       ­ User perspective: the smallest allotment of logical
+          secondary storage
+
+            ­ File type (executable, object, source code, text,
+              multimedia, archive...)
+
+            ­ File attributes
+            ­ File operations
+
+                                                                                                                                                                             17
+File ­ what are going to be stored?
+
+· E.g., a text file.
+
+                      h e l l o _ w o r l d `\n'
+
+                                       test.txt
+
+What can we find out in this example?
+
+Content?              Content of the file
+Filename?             Content of its parent directory
+File size?            Attribute of the file
+
+When a file is named, it becomes independent of the
+process, the user, and even the system
+
+                                                       18
+File Attributes
+
+  · Typical file attributes
+
+Name        Human-readable form
+Identifier  Unique tag (a number which identifies the file within the FS)
+Type        Text file, source file, executable file...
+Location    Pointer to a device and to the location of the file on the device
+Size        Number of bytes, words, or blocks
+Time, date  Creation, last modification, last use...
+Protection  Access control information (read/write/execute)
+
+You can try the command "ls -l"
+
+                                                                               19
+File Attributes
+
+  · Typical file attributes
+
+Name        Human-readable form
+Identifier  Unique tag (a number which identifies the file within the FS)
+Type        Text file, source file, executable file...
+Location    Pointer to a device and to the location of the file on the device
+Size        Number of bytes, words, or blocks
+Time, date  Creation, last modification, last use...
+Protection  Access control information (read/write/execute)
+
+Some new systems also support extended file
+attributes (e.g., checksum)
+
+                                                                               20
+File Attributes
+
+· File attributes are FS dependent.
+
+    ­ Not OSdependent.
+
+The design of FAT32    Common Attributes  FAT32  NTFS  Ext2/3/4
+does not include any   Name                                
+security ingredients.  Size                                
+                       Permission                          
+                       Owner                               
+                       Access, creation,                   
+                       modification time
+
+                                                                 21
+File Permissions
+
+· E.g., in Unix system
+
+           First field: File/director
+           2nd /3rd /4th fields (3 bits each): controls read/write/execute
+           for the file owner/file's group/others (e.g., 111:7,110:6)
+           What is the meaning of the permission 775/664?
+
+                                                                                                                                                                             22
+Writing attributes?
+
+· Can you change those attributes directly?
+
+Common                    Way to change them?
+Attributes
+                   Command?                    Syscall?
+Name
+Size               mv                      rename()
+
+Permission         Too many tools to       write(), truncate(),
+Owner
+Access, creation,  update files' contents      etc.
+modification time
+                   chmod                       chmod()
+
+                   chown                       chown()
+
+                   touch                       utime()
+
+                                                                 23
+Part1: FS ­ Programmer Perspective
+   - File
+   - Directory
+   - Operations
+
+                                                                                                                                                                            24
+Directory
+
+· A directory is a file.
+
+    ­ Then, does it imply that it has file attributes and
+       file content?
+
+Answer: Sure  Answer: FS dependent
+
+· How does a directory file look like?
+
+                                                           25
+Pathname vs Filename
+
+· A file can be referred to by its name,
+  then how to achieve this?
+
+The directory that                        The filename
+"test.txt" resides in
+
+                       /home/os/test.txt                The pathname
+
+The pathname is unique within the entire file system.
+The filename is not unique within the entire file system.
+The filename is only unique within the directory that it resides.
+
+                                                                      26
+Pathname vs Filename
+
+· Why do we need to consider uniqueness?
+
+open("/some_directory/some_filename" , ......);
+
+FS Operations  The OS kernel translates the pathname
+Data address   into a set of data addresses on the device.
+
+               That means the pathname is the key!
+
+               If the pathname is not unique, how come
+               the OS can successfully find the data
+               needed?
+
+                                                                                                      27
+Directory Traversal Process
+
+· How to locate a file using pathname?
+
+Step (1) Suppose that the process     Step (2) The OS retrieves
+wants to open the file "/bin/ls".     the directory file of the
+                                      root directory `/'.
+The process then supplies the OS the
+unique pathname "/bin/ls".
+
+         /bin/l s
+
+Process                                    Step (3) The disk returns
+                                           the directory file.
+
+/bin/ls  FS Operations
+
+                                      bin
+
+                                      file:/
+
+                                                                                                                    28
+Directory Traversal Process
+
+· How to locate a file using pathname?
+
+         Step (4) The OS looks for the
+         name "bin" in the directory file.
+
+Process  /bin/l s              Step (5) If found, the in the OS
+/bin/ls                        retrieves the directory file of
+                          bin  "/bin" using the information of
+                               the file attributes of "bin".
+          FS Operations /
+
+         ls
+
+         file: /bin
+
+                                                                                           29
+Directory Traversal Process
+
+· How to locate a file using pathname?
+
+Step (6) The OS looks for the name "ls" in
+the directory file "bin".
+If found, then the OS knows that the file "/bin/ls"
+is found, and it starts the procedure to open the file
+"/bin/ls
+
+         /bin/l s
+
+Process
+
+/bin/ls  FS Operations
+
+                        ls
+
+                          bin
+
+                                                        30
+Short Summary
+
+· A directory file records all the files including
+  directories that are belonging to it.
+
+    ­ So, do you understand "/bin/ls" now?
+    ­ Locate the directory file of the target directory and to print
+
+       contents out.
+
+· Locating a file requires the directory traversal
+  process
+
+                                                                                                                                                                             31
+File Creation and Directory
+
+   · According to your experience, what is the
+     file creation?
+
+       ­ E.g., creating a file named "test.txt"?
+
+             · "touch test.txt"?
+             · "vim test.txt", then type ":wq"?
+             · "cp [some filename] test.txt"?
+
+   · The truth is:
+
+       File creation == Update of the directory file
+
+                                                                                                                                                                             32
+File Creation and Directory
+
+· If I type "touch text.txt" and "text.txt" does not exist,
+  what will happen to the Directory file?
+
+              Note: "touch text.txt" will only create the directory entry,
+                                 and there is no allocation for the file content.
+
+          Directory file: "/home/os"
+
+score_sheet.xls                         score_sheet.xls
+midterm_marks.xls                       midterm_marks.xls
+final_exam_paper.pdf                    final_exam_paper.pdf
+
+           ......                                  ......
+                                                 text.txt
+     A new directory entry is created.
+
+                                                                                   33
+File Deletion and Directory
+
+   · Removing a file is the reverse of the creation process.
+       ­ Note that we are not ready to talk about de-allocation of
+          the file content yet.
+
+   Directory file: "/home/os"  score_sheet.xls
+                               midterm_marks.xls
+score_sheet.xls                final_exam_paper.pdf
+midterm_marks.xls
+final_exam_paper.pdf                      ......
+
+           ......
+        text.txt
+
+                                                                    34
+Updating directory file
+
+  · When/how to update a directory file?
+
+Creating a directory file   syscall - mkdir();
+                            Example program - mkdir.
+   Add an entry to the
+       directory file       syscall - open(), creat();
+                            Example program - cp, mv, etc.
+  Remove an entry to the
+         directory file     syscall - unlink();
+                            Example program - rm.
+   Remove a directory file
+                            syscall ­ rmdir();
+                            Example program - rmdir.
+
+                                                            35
+Part1: FS ­ Programmer Perspective
+   - File
+   - Directory
+   - Operations
+
+                                                                                                                                                                            36
+Overview
+
+           fopen() fread() fwrite() fclose()  Library Calls
+
+           open() read() write() close()      System Calls
+
+  NTFS-      Ext4-     FAT32-    ISO9660-       Kernel
+ specific   specific   specific   specific    Functions
+functions  functions  functions  functions
+
+                                                         37
+File operations
+
+· The operating system should provide...
+
+Create    Allocate space, add an entry in the directory
+
+Write     Filename, file content (write pointer)
+
+Read      Filename, mem location (read pointer)
+
+Reposition
+                File seek (not involve actual I/O), required for random accesses
+
+Delete    Release space, and erase directory entry
+
+Truncate  Keeps attributes only
+
+                                                                                  38
+File operations
+
+· Many operations involve searching the directory for
+  locating the file (read/write/reposition...)
+
+   ­ Can we avoid this content searching???
+
+    Open-file table
+
+                   An open() system call is provided, and it is called before a file is
+                   first used
+
+                   OS keeps a table containing information about all open files (per-
+                   process and system-wide table)
+
+                   The file will be closed when it is no longer being actively used,
+                   using close() system call
+
+                                                                                                                                                                             39
+File Open ­ Example                                      fopen()
+
+· What is fopen()?                                              Return 3
+
+   ­ First thing first, fopen() calls open().            open()
+   ­ FILE *fopen(const char
+                                                          FS-specific
+      *filename, const char *mode)                        functions
+
+· What is the type "FILE"?
+
+   ­ "FILE": a structure defined in "stdio.h".
+   ­ fopen() creates memory for the "FILE"
+
+      structure.
+
+         · Fact: occupying space in the area of
+           dynamically allocated memory, i.e., malloc()
+
+                                                                          40
+What is inside the "FILE" structure?
+
+· There is a lot of helpful data in FILE:
+
+   ­ Two important things: the file descriptor and a buffer!
+
+int main(void) {
+      printf("fd of stdin = %d\n", fileno(stdin) );
+      printf("fd of stdout = %d\n", fileno(stdout) );
+      printf("fd of stderr = %d\n", fileno(stderr) );
+
+}
+
+fileno() returns the file descriptor of the FILE structure.  $ ./fileno
+The type of stdin, stdout, and stderr is "FILE *"            fd of stdin = 0
+                                                             fd of stdout = 1
+                                                             fd of stderr = 2
+                                                             $_
+
+                                                                               41
+The Truth of Opening a File
+
+Step (5) The OS returns         Step (4) The OS then
+the file descriptor to the      associates the attributes to
+process.                        a number and the number is
+                                called the file descriptor.
+                Process
+                            Kernel  Open-file                 Step (3) The disk returns
+                                    Table                     the file attributes.
+
+                            fd
+
+                unique      3
+              pathname        FS Operations
+
+Step (1) The process                           Step (2) The OS looks
+supplies a pathname to                         for the file attributes of
+the OS.                                        the target file in the disk.
+
+                            Note: these steps are OS-independent as well as FS-independent.
+
+                                                                                                                                                42
+The Truth of Opening a File
+
+                            Step (4) The OS then
+
+Step (5) The OS returns     associates the attributes to
+the file descriptor to the
+process.                    a   cnaulmleNdboetthreea: nfidlethdeensucmripbteorr.  Step (3) The disk returns
+                            is
+                Process
+                                                                                  the file attributes.
+                unique
+              pathname          Opening a file only involves the
+
+Step (1) The process            pathname and the attributes of
+supplies a pathname to
+the OS.                     fd  the file, instead of the file content!
+
+                            3
+
+                                FS Operations
+
+                                                                                  Step (2) The OS looks
+                                                                                  for the file attributes of
+                                                                                  the target file in the disk.
+
+                            Note: these steps are OS-independent as well as FS-independent.
+
+                                                                                                                                                43
+What is a file descriptor?
+
+      Process B                                              Process A
+
+0123  file descriptor       0123                             file descriptor
+45         array                                                  array
+
+                                                             See? A file descriptor is
+                                                             just an array index for
+                                                             each process to locate
+                                                             its opened files.
+
+                                                  Open-file
+                                                     Table
+
+Although a file is opened by two different processes,
+the kernel uses one structure to maintain it!
+
+                                                                                        44
+How about read and write (read()
+and write() system calls)?
+
+                                                                                                                                             45
+read() & write()
+
+· You know, I/O-related calls will invoke system calls.
+
+int read ( int fd, void *buffer, int bytes_to_read )
+
+                                                       From file to buffer.
+
+int write ( int fd, void *buffer, int bytes_to_write )
+
+              From buffer to file.                               Note: I modified the function prototypes.
+
+Library calls that eventually invoke the  Library calls that eventually invoke the
+read() system call                        write() system call
+scanf(), fscanf()                         printf(), fprintf()
+getchar(), fgetc()                        putchar(), fputc()
+gets(), fgets()                           puts(), fputs()
+fread()                                   fwrite()
+
+                                                                                                            46
+How to read from open files
+
+Step (1) The process           Step (2) The OS reads the file attributes and
+supplies a file descriptor to  uses the stored attributes to locate the
+the OS.                        required data.
+
+                 Process       Open files 3
+
+                       3                       data    Step (3) The disk returns the
+                       fd                    location  required data.
+
+                               FS Operations           - File data is stored in a fixed
+                                                       size cache in the kernel.
+
+                               Kernel
+                               cache
+
+Step (4) The OS fills the buffer provided
+by the process with the data. Write data to
+the userspace buffer.
+
+                                                                                         47
+read() system call
+
+read()
+
+                Step 1.
+                - Check whether the end of the file is reached or not.
+
+                  [ Comparing size and file seek. ]
+
+FS-specific  1         File           Runtime
+                    attributes        attributes
+functions
+
+                    Kernel-level, list of opened files.
+
+        2       Step 2. Reading data
+
+                                                                        48
+read() system call
+
+           read()
+
+                                   Step 3.
+                                    - File data is stored in a fixed size cache in the kernel.
+Step 4.
+Write data to the 4
+userspace buffer.
+
+                                                           Kernel cache
+
+FS-specific  1         File     Runtime                  3
+                    attributes  attributes
+functions
+
+                    Kernel-level, list of opened files.
+
+2
+
+                                                                                                                                      49
+write() system call
+
+           write()                    3           Step 3.
+
+ Step 1.                                          The call returns.
+ Write data to the 1
+ kernel buffer.                          2 Kernel cache 2
+
+Step 2.                                  File              Runtime
+According to the data length,         attributes           attributes
+(1) change in file size, if any, and
+(2) change in the file seek.          Kernel-level, list of opened files.
+
+                                                                           50
+write() system call
+
+write()               3
+                1
+                                   Step 4.
+                                   The buffered data will be flushed to
+                                   the disk from time to time.
+
+                      2 Kernel cache 2
+
+FS-specific        4     File     Runtime
+                      attributes  attributes
+functions
+
+                      Kernel-level, list of opened files.
+
+                                  4
+
+                                                                                            51
+The kernel buffer cache implies...
+
+· Performance
+
+   ­ Increase reading performance?
+   ­ Increase writing performance?
+
+· Problem
+
+   ­ Can you answer me why you cannot press the reset
+      button?
+
+   ­ Can you answer me why you need to press the "eject"
+      button before removing USB drives?
+
+                                                                                                                                                                             52
+Short Summary
+
+ · Every file has its unique pathname.
+      ­ Its pathname leads you to its attributes and the file
+        content.
+
+                          A file has two important components! Plus,
+                          there are usually stored separately.
+
+                                                                                                                                                                             53
+Short Summary
+
+   · We only introduce the read/write flow:
+
+        ­ File writing involves disk space allocation; but...
+        ­ The allocation of disk space is highly related to the
+
+           design of the layout of the FS.
+        ­ Also, the same case for the de-allocation of the disk
+
+           space...
+
+                                                                                                                                                                             54
+Summary of part 1
+
+· In this part, we have an introduction to FS
+
+   ­ File and directory
+   ­ The truth about the calls that we usually use,
+   ­ We learned: The content of a file is not the only entity,
+
+      but also the file attributes.
+
+· In the next part, we will go into the disk:
+
+   ­ How and where to store the file attributes?
+   ­ How and where to store the data?
+   ­ How to manage a disk?
+
+                                                                                                                                                                             55
+

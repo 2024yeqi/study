@@ -1,0 +1,1630 @@
+Operating Systems
+
+Prof. Yongkun Li
+- 
+http://staff.ustc.edu.cn/~ykli
+
+                                           Chapter 3
+                 Process Concepts & Operations
+
+                                                                                                                                                                          1
+Outline
+
+· Process Concept
+
+   ­ Program vs process
+   ­ Process in memory & PCB
+   ­ Process state
+
+· Processes Operations
+
+   ­ Process creation, program execution, process
+      termination
+
+   ­ UNIX example: fork(), exec*(), wait()
+
+                                                                                                                                                                               2
+What is a process?
+
+   Informally, a process is a program in execution.
+
+               Process
+
+                                    Differences?
+
+Program
+
+Relationship?           Execution?
+
+                                                     3
+What is a program?
+
+                                                                                  Program
+
+                                                                                                                                                                   4
+What is a program?
+
+· What is a program?
+
+   ­ A program is a just a piece of code.
+
+· But, which code do you mean?
+
+   ­ High-level language code: C or C++?
+   ­ Low-level language code: assembly code?
+   ­ Not-yet an executable: object code?
+   ­ Executable: machine code?
+
+                                                                                                                                                                               5
+Flow of building a program (1 of 2)
+
+C code: hello.c                         Expanded C code: hello.c
+
+                         Pre-processor
+
+#define TXT "hello"                     Compiler &
+                                        Optimizer
+int main(void) {
+   printf("%s\n", TXT);
+   return 0;
+
+}
+
+                         Assembly code: hello.s
+
+                                                                                                                                               6
+(Still...1 of 2) Pre-processor
+
+· The pre-processor expands:
+
+   ­ #define, #include, #ifdef, #ifndef, #endif, etc.
+   ­ Try: "gcc ­E hello.c"
+
+#define TXT "hello"        Pre-processor  int main(void) {
+                         gcc ­E hello.c      printf("%s\n", "hello");
+int main(void) {                             return 0;
+   printf("%s\n", TXT);
+   return 0;                              }
+
+}                                                Expanded code
+
+     Original code
+
+                                                                       7
+(Still...1 of 2) Pre-processor
+
+· Another example: the macro!
+
+             #define SWAP(a,b) { int c; c = a; a = b; b = c; }
+
+             int main(void) {
+                    int i = 10, j = 20;
+                    printf("before swap: i = %d, j = %d\n", i, j);
+                    SWAP(i, j);
+                    printf("after swap: i = %d, j = %d\n", i, j);
+
+             }
+
+Pre-processor  int main(void) {
+                     int i = 10, j = 20;
+                     printf("before swap: i = %d, j = %d\n", i, j);
+                     { int c; c = i; i = j; j = c; };
+                     printf("after swap: i = %d, j = %d\n", i, j);
+
+               }
+
+                                                                     8
+(Still...1 of 2) Pre-processor
+
+· How about: #include?
+
+#include "header.h"
+
+     int main(void) {      Pre-processor  int add_fun(int a, int b) {
+            add_fun(1,2);                       return (a + b);
+            return 0;
+                                          }
+     }
+                                          int main(void) {
+Program: include.c                              add_fun(1,2);
+                                                return 0;
+
+                                          }
+
+  int add_fun(int a, int b) {
+        return (a + b);
+
+  }
+
+Program: header.h
+
+                                                                       9
+(Still...1 of 2) Compiler and Optimizer
+
+· The compiler performs:
+
+   ­ Syntax checking and analyzing;
+   ­ If there is no syntax error, construct intermediate codes,
+
+      i.e., assembly codes;
+
+· The optimizer optimizes codes
+
+   ­ It improves stupid codes! "-O" means to optimize.
+   ­ Check the parameter of gcc The number followed is the
+
+                                                          optimization level. Max is level 3,
+                                                          i.e., "-O3". Default is level is "-O1".
+
+                                                          "-O0": means no optimization.
+
+                                                                                                                                                                             10
+Flow of building a program (2 of 2)
+
+Assembly code: hello.s                  Object code: hello.o
+
+                         Assembler
+                        "as" in Linux.
+
+                            Linker
+                        "ld" in Linux.
+
+Executable: hello                       Static/Dynamic
+                                             library
+
+                                                                                                            11
+(Still...2 of 2) Assembler and Linker
+
+· The assembler assembles "hello.s" and
+  generates an object code "hello.o"
+
+   ­ A step closer to machine code
+   ­ Try: "as hello.s ­o hello.o"
+
+· The linker puts together all object files as well as
+  the libraries
+
+   ­ There are two kinds of libraries: statically-linked and
+      dynamically-linked ones
+
+                                                                                                                                                                             12
+Sidetrack: Library files
+
+· A library file is...
+
+   ­ just a bunch of function implementations.
+   ­ for the linker to look for the function(s) that the target C
+
+      program needs.
+
+                                                                                            Shared library
+                                                                                            with ".so" file
+                                                                                            extension.
+
+                                                                                 .so
+
+                               A static library
+
+                               with ".a" file
+
+                               extension. It is
+
+A bunch of "dot-o" files.  .a  also called an
+
+                               archive.
+
+                                                 13
+Sidetrack: Library files
+
+.a              .o                             .so       .o
+
+The final                          The linker only            A smaller
+program is the                     checks whether the         program!
+combination of                     functions used in
+the above two                      ".o" files exists in
+codes.                             the ".so" files or
+                                   not.
+
+Linking with static library file.  Linking with dynamic library file.
+
+                                                                                                         14
+How to compile multiple files?
+
+· gcc by default hides all the intermediate steps.
+
+   ­ Executable: "gcc -o hello hello.c" generates
+      "hello" directly.
+
+   ­ Object code: "gcc -c hello.c" generates "hello.o"
+      directly.
+
+· How about working with multiple files?
+
+                                                                                                                                                                             15
+How to compile multiple files?
+
+                                     Remember, below shows one of the solution.
+
+Step 1.                         Step 2.                   Step 3.
+
+                          *.c         $ gcc ­c code.c          $ gcc ­o prog *.o
+                                      ......
+ Prepare all the source files.
+ Important: there must be       *.o
+ one and only one file
+ containing the main function.                                              prog
+
+                                Compile them into object  Construct the program
+                                codes one by one.         together with all the object
+                                                          codes.
+
+                                                                                                           16
+Conclusion on "what is a program?"
+
+· A program is just an executable file!
+
+   ­ It is static;
+   ­ It may be associated with dynamically-linked files;
+
+         · "*.so" in Linux and "*.dll" in Windows.
+
+· It may be compiled from more than one file
+
+                                                                                                                                                                             17
+What is a process?
+
+                                                                      PrPorPcorPecorsPecosrsecossecssesss
+
+                                                                                                                                                                 18
+Process in Memory
+
+· A process is a program in execution
+
+   ­ A program (an executable file) becomes process when it
+      is loaded into memory
+
+   ­ Active
+
+· Process in memory
+
+   ­ What are they? Only the program code?
+
+                                                                                                                                                                             19
+Process in Memory
+
+· Text section
+
+   ­ Program code
+
+· Data section
+
+   ­ Global variables
+
+· Stack
+
+   ­ Temporary data (function parameters, return addresses,
+      local variables)
+
+· Heap
+
+   ­ Dynamically allocated memory during process run time
+
+· Program counter and contents of registers
+
+                                                                                                                                                                             20
+Process in Memory
+
+                                                                                                                                                                             21
+Process State
+
+· As a process executes, it changes state, which is
+  defined in part by the current activity
+
+   ­ new: The process is being created
+   ­ running: Instructions are being executed
+   ­ waiting: The process is waiting for some event to occur
+
+         · I/O completion or reception of a signal
+
+   ­ ready: The process is waiting to be assigned to a
+      processor
+
+   ­ terminated: The process has finished execution
+
+                                                                                                                                                                             22
+Diagram of Process State
+
+· State diagram
+
+· Only one process can be running on any processor
+  at any instant
+
+· Many processes may be ready or waiting
+
+                                                                                                                                                                             23
+How to switch processes?
+
+          Example: CPU switch from process to process
+
+                                                                                                                                                                             24
+How to locate/represent a process?
+
+· Process control block (PCB) or task control block
+
+    ­ Process state (running, waiting, etc)
+    ­ Program counter
+
+            · location of next instruction to execute
+
+    ­ CPU registers
+
+            · contents of all process-centric registers
+
+    ­ CPU scheduling information
+
+            · priorities, scheduling queue pointers
+
+    ­ Memory-management information
+
+            · memory allocated to the process
+
+    ­ I/O status information
+
+            · I/O devices allocated to process, list of open files
+
+    ­ Accounting information
+
+            · CPU used, clock time elapsed since start, time limits
+
+                                                                                                                                                                             25
+Process Data Structure in Linux
+
+· Represented by C structure task_struct
+
+    ­ <linux/sched.h>
+
+     pid t_pid; /* process identifier */
+     long state; /* state of the process */
+     struct sched_entity se; /* scheduling information */
+     struct task_struct *parent; /* this process's parent */
+     struct list_head children; /* this process's children */
+     struct files_struct *files; /* list of open files */
+     struct mm_struct *mm; /* address space of this process */
+
+                                                                                                                                                                             26
+Relationship between Process Data & PCB
+
+            Global   Dynamically-                     User space
+           variable    allocated
+                         memory      Code +
+           Local                   constants
+         variable
+
+Process                        Invoking system
+                               calls. E.g., fork(),
+                               exec*(), wait().
+
+          Process    Access        Kernel code
+         structure   process'      with system
+                     internal
+            (PCB)                      calls
+
+                                              Kernel Space
+
+                                                                           27
+Conclusion on "what is a process?"
+
+· A process is a program in execution
+
+   ­ process (active entity) != program (static entity)
+   ­ Why active?
+
+         · A program counter specifying the next instruction to execute +
+           a set of associated resources
+
+· Only one process can be running on any processor
+  at any instant
+
+                                                                                                                                                                             28
+Conclusion on "what is a process?"
+
+· Two processes maybe associated with the same
+  program (Two users are running the same program)
+
+   ­ Example
+
+         · The same user invokes two copies of the web browser
+
+   ­ Separate execution sequences
+
+         · The text section may be equivalent
+         · The data, heap, and stack sections vary
+
+· A process can be an execution environment for
+  other code
+
+   ­ Java programming environment
+   ­ java Program (java runs JVM as a process)
+
+                                                                                                                                                                             29
+Process Operations
+
+                                                                      PrPorPcorPecorsPecosrsecossecssesss
+
+                                                                                                                                                                 30
+Process Operations
+
+· Process
+
+   ­ It associates with all the files opened by that process.
+   ­ It attaches to all the memory that is allocated for it.
+   ­ It contains every accounting information,
+
+         · running time, current memory usage, who owns the process,
+           etc.
+
+· You couldn't operate any things without processes.
+
+                                                                                                                                                                             31
+Process Operations
+
+· System must provide mechanisms for:
+
+   ­ process identification
+   ­ process creation
+   ­ program execution
+   ­ process termination
+
+· Some basic and important system calls
+
+   ­ getpid()
+   ­ fork()
+   ­ exec*()
+   ­ exit()
+   ­ wait()
+
+                                                                                                                                                                             32
+Process Operations
+  - process identification
+
+                                                                       PrPorPcorPecorsPecosrsecossecssesss
+
+                                                                                                                                                                 33
+Process identification
+
+· How can we identify processes?
+
+   ­ Each process is given an unique ID number, and is called
+      the process ID, or the PID.
+
+   ­ The system call, getpid(), prints the PID of the calling
+      process.
+
+#include <stdio.h> // printf()              $ ./getpid
+#include <unistd.h> // getpid()             My PID is 1234
+                                            $ ./getpid
+int main(void) {                            My PID is 1235
+      printf("My PID is %d\n", getpid() );  $ ./getpid
+                                            My PID is 1237
+}
+
+                                                            34
+Process Operations
+  - process identification
+  - process creation
+
+                                                                       PrPorPcorPecorsPecosrsecossecssesss
+
+                                                                                                                                                                 35
+Process Creation
+
+· A process may create several new processes
+
+   ­ Parent process: the creating process
+   ­ Children processes: the new processes
+
+· The first process
+
+   ­ The kernel, while it is booting up, creates the first
+      process ­ init.
+
+   ­ The "init" process:
+
+         · has PID = 1, and
+         · is running the program code "/sbin/init".
+
+   ­ Its first task is to create more processes...
+
+                                                                                                                                                                             36
+Process Creation
+
+· Tree hierarchy
+
+   ­ Each of the new process may in turn create other
+      processes, and form a tree hierarchy
+
+                                                                                                                                               init
+                                                                                                                                             pid = 1
+
+                           login             kthreadd                 sshd
+                        pid = 8415           pid = 2              pid = 3028
+
+                bash                khelper             pdflush       sshd
+            pid = 8416              pid = 6            pid = 200  pid = 3610
+
+      ps                   emacs                                     tcsch
+pid = 9298              pid = 9204                                pid = 4005
+
+                                                                                               37
+Process blossoming
+
+· You can view the tree with the command:
+
+   ­ "pstree"; or
+   ­ "pstree ­A" for ASCII-character-only display.
+
+                                   also implies the parent-child relationship.
+
+init              SSH              Shell
+                server
+     fork()                                fork()
+     & exec*()          fork()             & exec*()
+                        & exec*()
+                                                      top
+
+                                                                       38
+Process blossoming...with orphans?
+
+· However, termination can happen, at any time and in any
+   place...
+
+    ­ All the resources are deallocated to OS when a process terminates
+    ­ A process may become an orphan when its parent terminated
+    ­ An orphan turns the hierarchy from a tree into a forest!
+    ­ Plus, no one would know the termination of the orphan.
+
+init                 Now, this poor
+                     process becomes
+        SSH   Shell  an orphan.
+      server
+                               top
+
+                                                      39
+Process blossoming...with re-parent!
+
+· In Linux...
+
+   ­ We have the re-parent operation.
+   ­ The "init" process will become the step-mother of all
+
+      orphans.
+
+· Well...Windows maintains a forest-like hierarchy.
+
+              re-parent
+
+init
+
+        SSH              Shell
+      server
+
+                                top
+
+                                                 40
+A short summary
+
+· Observation 1
+
+   ­ The processes in Linux is always organized as a tree.
+   ­ Because of the re-parent operation, there is always only
+
+      one process tree.
+
+· Observation 2
+
+   ­ The re-parent operation allows processes running
+      without the need of a parent terminal.
+
+   ­ Thus, the background jobs survive even though the
+      hosting terminal is closed.
+
+                                                                                                                                                                             41
+Relationship between Parent and Child
+
+· Resource sharing options
+
+    ­ Parent and children share all resources
+    ­ Children share subset of parent's resources
+    ­ Parent and child share no resources
+
+· Execution options
+
+    ­ Parent and children execute concurrently
+    ­ Parent waits until children terminate
+
+· Address space options
+
+    ­ Child is a duplicate of parent
+    ­ Child has a new program loaded into it
+
+· We focus on UNIX examples to illustrate
+
+                                                                                                                                                                             42
+Process creation
+
+· To create a process, we use the system call fork()
+
+Original execution flow                           The process splits into two!
+of a process
+                                                  Which process will be
+                                    The process   executed after fork()?
+                                 invokes fork().
+                                                                                                             43
+               Flow of original process
+               Flow of newly-created process
+Process creation ­ fork() system call
+
+· So, how do fork() and the processes behave?
+
+$ ./fork_example_1  PID 1234                   Process 1234 is the original
+Ready (PID=1234)                               process, and we call it the
+My PID is 1234                                 parent process.
+My PID is 1235
+$_                                             PID 1235
+
+int main(void) {                               Process 1235 is created by
+      printf("Ready (PID = %d)\n", getpid());  the fork() system call, and
+      fork();                                  we call it the child process.
+      printf("My PID is %d\n", getpid() );
+      return 0;
+
+}
+
+Why is this line of code executed twice?
+
+                                                                                                                                                      44
+Process creation ­ fork() system call
+
+· So, how do fork() and the processes behave?
+
+             int main(void) {
+                   printf("Ready (PID = %d)\n", getpid());
+                   fork();
+                   printf("My PID is %d\n", getpid() );
+                   return 0;
+
+             }
+
+        What do we know so far?
+        -Both the parent and the child execute the same program before and after fork().
+        -The child process starts its execution at the location that fork() is returned, not
+        from the beginning of the program.
+
+                                                                                                                                                                             45
+Process creation ­ fork() system call
+
+     One more example
+
+1 int main(void) {                              $ ./fork_example_2
+                                                before fork ...
+2 int result;
+                                           PID 1234
+3 printf("before fork ...\n");
+
+4 result = fork();
+
+5 printf("result = %d.\n", result);
+
+6
+
+7 if(result == 0) {
+
+8     printf("I'm the child.\n");
+
+9     printf("My PID is %d\n", getpid());
+
+10 }
+
+11 else {
+
+12    printf("I'm the parent.\n");
+
+13    printf("My PID is %d\n", getpid());
+
+14 }
+
+15
+
+16 printf("program terminated.\n");
+
+17 }
+
+                                                                    46
+Process creation ­ fork() system call
+
+     One more example
+
+1 int main(void) {                              $ ./fork_example_2
+                                                before fork ...
+2 int result;
+                                           PID 1234 fork() PID 1235
+3 printf("before fork ...\n");
+
+4 result = fork();
+
+5 printf("result = %d.\n", result);
+
+6
+
+7 if(result == 0) {
+
+8     printf("I'm the child.\n");
+
+9     printf("My PID is %d\n", getpid());
+
+10 }
+
+11 else {
+
+12    printf("I'm the parent.\n");
+
+13    printf("My PID is %d\n", getpid());
+
+14 }
+
+15
+
+16 printf("program terminated.\n");
+
+17 }
+
+                                                                     47
+Process creation ­ fork() system call
+
+    Assumption
+
+                                                                                      $ ./fork_example_2
+                                                                                      Before fork ...
+
+       Let there be only ONE CPU. Then...
+       - Only one process is allowed to be executed at one time.
+       - However, we can't predict which process will be chosen by the OS.
+       - By the time, this mechanism is called process scheduling.
+
+       In this example, we assume that the parent, PID 1234,
+       runs first, after the fork() call.
+
+                                                                                 PID 1234 fork() PID 1235
+
+                                                                                                                                                                             48
+Process creation ­ fork() system call
+
+1 int main(void) {                         $ ./fork_example_2
+                                           before fork ...
+2 int result;                              result = 1235
+
+3 printf("before fork ...\n");              Important
+
+4 result = fork();                          For parent, the return
+                                            value of fork() is the
+5 printf("result = %d.\n", result);         PID of the created child.
+
+6
+
+7 if(result == 0) {
+
+8     printf("I'm the child.\n");
+
+9     printf("My PID is %d\n", getpid());
+
+10 }
+
+11 else {
+
+12    printf("I'm the parent.\n");
+
+13    printf("My PID is %d\n", getpid());
+
+14 }
+
+15
+
+16 printf("program terminated.\n");
+
+17 }
+
+                                           PID 1234   PID 1235
+                                           (running)  (waiting)
+
+                                                                       49
+Process creation ­ fork() system call
+
+1 int main(void) {                         $ ./fork_example_2
+                                           before fork ...
+2 int result;                              result = 1235
+                                           I'm the parent.
+3 printf("before fork ...\n");             My PID is 1234
+                                           program terminated.
+4 result = fork();
+
+5 printf("result = %d.\n", result);
+
+6
+
+7 if(result == 0) {
+
+8     printf("I'm the child.\n");
+
+9     printf("My PID is %d\n", getpid());
+
+10 }
+
+11 else {
+
+12    printf("I'm the parent.\n");
+
+13    printf("My PID is %d\n", getpid());
+
+14 }
+
+15
+
+16 printf("program terminated.\n");
+
+17 }
+
+                                           PID 1234  PID 1235
+                                            (dead)   (waiting)
+
+                                                                50
+Process creation ­ fork() system call
+
+1 int main(void) {                         $ ./fork_example_2
+                                           before fork ...
+2 int result;                              result = 1235
+                                           I'm the parent.
+3 printf("before fork ...\n");             My PID is 1234
+                                           program terminated.
+4 result = fork();                         result = 0
+
+5 printf("result = %d.\n", result);         Important
+
+6                                           For child, the return value
+                                            of fork() is 0.
+7 if(result == 0) {
+
+8     printf("I'm the child.\n");
+
+9     printf("My PID is %d\n", getpid());
+
+10 }
+
+11 else {
+
+12    printf("I'm the parent.\n");
+
+13    printf("My PID is %d\n", getpid());
+
+14 }
+
+15
+
+16 printf("program terminated.\n");
+
+17 }
+
+                                           PID 1234  PID 1235
+                                            (dead)   (running)
+
+                                                                         51
+Process creation ­ fork() system call
+
+1 int main(void) {                         $ ./fork_example_2
+                                           before fork ...
+2 int result;                              result = 1235
+                                           I'm the parent.
+3 printf("before fork ...\n");             My PID is 1234
+                                           program terminated.
+4 result = fork();                         result = 0
+                                           I'm the child.
+5 printf("result = %d.\n", result);        My PID is 1235
+                                           program terminated.
+6                                          $_
+
+7 if(result == 0) {
+
+8     printf("I'm the child.\n");
+
+9     printf("My PID is %d\n", getpid());
+
+10 }
+
+11 else {
+
+12    printf("I'm the parent.\n");
+
+13    printf("My PID is %d\n", getpid());
+
+14 }
+
+15
+
+16 printf("program terminated.\n");
+
+17 }
+
+                                           PID 1234  PID 1235
+                                            (dead)    (dead)
+
+                                                                52
+Process creation ­ fork() system call
+
+· fork() behaves like "cell division".
+
+   ­ It creates the child process by cloning from the parent
+      process, including...
+
+Cloned items         Descriptions
+Program code         They are sharing the same piece of code.
+[File & Memory]
+Memory               Including local variables, global variables, and dynamically
+                     allocated memory.
+Opened files         If the parent has opened a file "A", then the child will also have
+[Kernel's internal]  file "A" opened automatically.
+Program counter      That's why they both execute from the same line of code
+[CPU register]       after fork() returns.
+
+                                                                                         53
+Process creation ­ fork() system call
+
+· However...
+
+   ­ fork() does not clone the following...
+   ­ Note: they are all data inside the memory of kernel.
+
+Distinct items  Parent                            Child
+
+Return value of fork() PID of the child process.  0
+
+PID             Unchanged.                        Different, not necessarily be
+                                                  "Parent PID + 1"
+Parent process  Unchanged.
+                                                  Doesn't have the same parent
+Running time    Cumulated.                        as that of the parent process.
+
+                                                  Just created, so should be 0.
+
+                                                                                  54
+Process Operations
+  - process identification
+  - process creation
+  - program execution
+
+                            PrPorPcorPecorsPecosrsecossecssesss
+
+                                                                 55
+fork() can only duplicate...
+
+· fork() is rather boring...
+
+   ­ If a process can only duplicate itself and always runs the
+      same program, then...
+
+   ­ how can we execute other programs?
+
+· We want CHANGE!
+
+   ­ Meet the exec() system call family.
+
+                                                                                                                                                                             56
+Program execution
+
+· execl() ­ a member of the exec system call
+  family (and the family has 6 members).
+
+int main(void) {                    $ ./exec_example
+   printf("before execl ...\n");    before execl ...
+
+execl("/bin/ls", "/bin/ls", NULL);
+
+   printf("after execl ...\n");   Arguments of the execl() call
+
+   return 0;                      1st argument: the program name, "/bin/ls" in the
+}                                 example.
+                                  2nd argument: 1st argument to the program.
+                                  3rd argument: indicate the end of the list of arguments.
+
+                                                                                            57
+Program execution
+
+· Example #1: run the command "/bin/ls"
+
+          execl("/bin/ls", "/bin/ls", NULL);
+
+Argument  Value in above  Description
+Order     example
+1         "/bin/ls"       The file that the programmer wants to execute.
+
+2         "/bin/ls"       When the process switches to "/bin/ls",
+                          this string is the first program argument.
+3         NULL            This states the end of the program argument
+                          list.
+
+                                                                          58
+Program execution
+
+· Example #2: run the command "/bin/ls -l"
+
+execl("/bin/ls", "/bin/ls", "-l", NULL);
+
+Argument  Value in above  Description
+Order     example
+1         "/bin/ls"       The file that the programmer wants to execute.
+2         "/bin/ls"
+                          When the process switches to "/bin/ls",
+3         "-l"            this string is the first program argument.
+                          When the process switches to "/bin/ls",
+4         NULL            this string is the second program argument.
+                          This states the end of the program argument
+                          list.
+
+                                                                          59
+Program execution
+
+· execl() ­ a member of the exec system call
+  family (and the family has 6 members).
+
+int main(void) {                    $ ./exec_example
+   printf("before execl ...\n");    before execl ...
+
+execl("/bin/ls", "/bin/ls", NULL);
+
+printf("after execl ...\n");
+
+   return 0;                        What is the output?
+}
+
+                                    The same as the output of running
+                                    "ls" in the shell.
+
+                                                                       60
+Program execution
+
+· execl() ­ a member of the exec system call
+  family (and the family has 6 members).
+
+int main(void) {                       $ ./exec_example
+   printf("before execl ...\n");       before execl ...
+   execl("/bin/ls", "/bin/ls", NULL);  exec_example
+   printf("after execl ...\n");        exec_example.c
+   return 0;
+
+}
+
+                                                         61
+Program execution
+
+· execl() ­ a member of the exec system call
+  family (and the family has 6 members).
+
+int main(void) {                                     $ ./exec_example
+   printf("before execl ...\n");                     before execl ...
+   execl("/bin/ls", "/bin/ls", NULL);                exec_example
+   printf("after execl ...\n");                      exec_example.c
+   return 0;
+                                               GUESS:
+}                                      What happens next?
+
+                                                                       62
+Program execution
+
+· execl() ­ a member of the exec system call
+  family (and the family has 6 members).
+
+                                                                                       WHAT?!
+                                                                            The shell prompt appears!
+
+int main(void) {                       $ ./exec_example
+   printf("before execl ...\n");       before execl ...
+   execl("/bin/ls", "/bin/ls", NULL);  exec_example
+   printf("after execl ...\n");        exec_example.c
+                                       $_
+
+   return 0;                           The output says:
+}                                      (1) The gray code block is not reached!
+                                       (2) The process is terminated!
+
+                                       WHY IS THAT?!
+
+                                                                                                                      63
+Program execution
+
+· The exec system call family is not simply a function
+  that "invokes" a command.
+
+  int main(void) {                        Process
+
+      printf("before execl ...\n");
+
+      execl("/bin/ls", "/bin/ls", NULL);
+
+      printf("after execl ...\n");
+
+      return 0;
+  }
+
+Originally, the process is executing the
+program "exec_example".
+
+                                                   64
+Program execution
+
+· The exec system call family is not simply a function
+  that "invokes" a command.
+
+int main(void) {                             /* The program "ls" */
+   printf("before execl ...\n");
+   execl("/bin/ls", "/bin/ls", NULL);        int main(int argc, char ** argv)
+                                             {
+
+                                                   ......
+                                                   exit(0);
+                                             }
+
+printf("after execl ...\n");
+
+      return 0;                              Process
+  }
+
+The execl() call changes the execution from
+"exec_example" to "/bin/ls"
+
+                                                                               65
+Program execution
+
+· The exec system call family is not simply a function
+  that "invokes" a command.
+
+The "return" or the "exit()"               /* The program "ls" */
+statement in "/bin/ls" will terminate
+the process...                             int main(int argc, char ** argv)
+                                           {
+
+                                                 ......
+                                                 exit(0);
+                                           }
+
+Therefore, it is certain that the process
+cannot go back to the old program!
+
+                                           Process
+
+                                                                             66
+Program execution - observation
+
+· The process is changing the code that is executing and never
+   returns to the original code.
+
+    ­ The last two lines of codes are therefore not executed.
+
+· The process that calls any one of the member of the exec
+   system call family will throw away many things, e.g.,
+
+    ­ Memory: local variables, global variables, and dynamically
+       allocated memory;
+
+    ­ Register value: e.g., the program counter;
+
+· But, the process will preserve something, including:
+
+    ­ PID;
+    ­ Process relationship;
+    ­ Running time, etc.
+
+                                                                                                                                                                             67
+Process Operations
+  - process identification
+  - process creation
+  - program execution
+  - fork() + exec*() = ?
+
+                                                                        PrPorPcorPecorsPecosrsecossecssesss
+
+                                                                                                                                                                    68
+When fork() meets exec*()...
+
+· The mix can become:
+
+   ­ A shell,
+   ­ The system() library call, etc...
+
+Execute         Resume
+command
+
+                                        Parent
+                                        Child
+
+Switch to       Terminate
+target program
+
+                                                69
+fork() + exec*() = system()?
+
+1 int system_test(const char *cmd_str) {
+
+2     if(cmd_str == -1)
+
+3        return -1;
+
+4     if(fork() == 0) {
+
+5        execl(cmd_str, cmd_str, NULL);             Is this the
+                                                    only result?
+6        fprintf(stderr,
+                                               $ ./system_implement_1
+         "%s: command not found\n", cmd_str);  before...
+                                               system_implement_1
+7        exit(-1);                             system_implement_1.c
+                                               after...
+8     }                                        $_
+
+9     return 0;
+
+10 }
+
+11
+
+12 int main(void) {
+
+13    printf("before...\n\n");
+
+14    system_test("/bin/ls");
+
+15    printf("\nafter...\n");
+
+16    return 0;
+
+17 }
+
+                                                                       70
+fork() + exec*() = system()?!
+
+1 int system_test(const char *cmd_str) {
+
+2     if(cmd_str == -1)
+
+3        return -1;
+
+4     if(fork() == 0) {
+
+5        execl(cmd_str, cmd_str, NULL);        Some strange cases
+                                               happened when the
+6        fprintf(stderr,                       program is executed
+                                               repeatedly!! Why?
+         "%s: command not found\n", cmd_str);
+                                                $ ./system_implement_1
+7        exit(-1);                              before...
+
+8     }                                         after...
+                                                system_implement_1
+9     return 0;                                 system_implement_1.c
+                                                $_
+10 }
+
+11
+
+12 int main(void) {
+
+13    printf("before...\n\n");
+
+14    system_test("/bin/ls");
+
+15    printf("\nafter...\n");
+
+16    return 0;
+
+17 }
+
+                                                                        71
+fork() + exec*() = system()...
+
+1 int system_test(const char *cmd_str) {
+
+2     if(cmd_str == -1)                           Let's re-color the program!
+
+3        return -1;                                                 Parent process
+                                                                    Child process
+4     if(fork() == 0) {                                             Both processes
+
+5        execl(cmd_str, cmd_str, NULL);        $ ./system_implement_1
+                                               before...
+6        fprintf(stderr,                       after...
+                                               system_implement_1
+         "%s: command not found\n", cmd_str);  system_implement_1.c
+                                               $_
+7        exit(-1);
+
+8     }
+
+9     return 0;
+
+10 }
+
+11
+
+12 int main(void) {
+
+13    printf("before...\n\n");
+
+14    system_test("/bin/ls");
+
+15    printf("\nafter...\n");
+
+16    return 0;
+
+17 }
+
+                                                                                    72
+fork() + exec*() = system()...
+
+     Parent fork()  Child           Parent fork()  Parent
+
+Expected execution   then   Possible execution      then
+sequence.                   sequence.
+                    Parent                         Child
+
+$ ./system_implement_1      $ ./system_implement_1
+before...                   before...
+
+system_implement_1          after...
+System_implement_1.c        system_implement_1
+                            System_implement_1.c
+after...                    $_
+$_
+
+                                                           73
+fork() + exec*()
+  Is it enough?
+
+                                                                                                                               74
+fork() + exec*() = system()...
+
+· Don't forget that we're trying to implement a system()-
+  compatible function...
+
+    ­ It is very weird to allow different execution orders.
+
+· How to let the child to execute first?
+
+    ­ But...we can't control the process scheduling of the OS to
+      this extent.
+
+· Then, our problem becomes...
+
+    ­ How to suspend the execution of the parent process?
+    ­ How to wake the parent up after the child is terminated?
+
+                                                                                                                                                                             75
+fork()+ exec*() + wait() = system()
+
+1 int system_test(const char *cmd_str) {
+
+2     if(cmd_str == -1)
+
+3        return -1;
+
+4     if(fork() == 0) {
+
+5        execl("/bin/sh", "/bin/sh",
+
+                 "-c", cmd_str, NULL);
+
+6        fprintf(stderr,
+
+         "%s: command not found\n", cmd_str);
+
+7        exit(-1);
+
+8     }
+
+9     wait(NULL);
+
+10    return 0;
+
+11 }
+
+12
+
+13 int main(void) {                            What is the
+                                               output now?
+14    printf("before...\n\n");
+
+15    system_test("/bin/ls");
+
+16    printf("\nafter...\n");
+
+17    return 0;
+
+18 }
+
+                                                            76
+fork()+ exec*() + wait() = system()
+
+1 int system_test(const char *cmd_str) {
+
+2     if(cmd_str == -1)
+
+3        return -1;
+
+4     if(fork() == 0) {                             The parent is
+                                                    suspended until
+5        execl("/bin/sh", "/bin/sh",                the child
+                                                    terminates
+                 "-c", cmd_str, NULL);
+                                               $ ./system_implement_2
+6        fprintf(stderr,                       before...
+
+         "%s: command not found\n", cmd_str);  system_implement_2
+                                               System_implement_2.c
+7        exit(-1);
+                                               after...
+8     }                                        $_
+
+9     wait(NULL);
+
+10    return 0;
+
+11 }
+
+12
+
+13 int main(void) {
+
+14    printf("before...\n\n");
+
+15    system_test("/bin/ls");
+
+16    printf("\nafter...\n");
+
+17    return 0;
+
+18 }
+
+                                                                       77
+wait() ­ properties explained
+
+· The wait() system call suspend the calling parent
+  process (Case 1).
+
+· When to wake up?
+
+   ­ wait() returns and wakes up the calling process when
+      the one of its child processes changes from running to
+      terminated.
+
+                                                                                             wait() wake up
+
+        Parent is
+        suspended.
+
+fork()  Terminate
+
+                         Case 1.
+
+                                  78
+wait() ­ properties explained
+
+· What happens if
+
+   ­ There were no running children;
+   ­ There were no children;
+
+· wait() does not suspend the calling process
+  (Case 2)
+
+                                                                                  Case 2.
+
+                                                                             wait()
+
+                                                                                    no suspension
+                                                                                    is needed.
+
+                                                   fork() Terminate
+
+                                                                                                                                                                             79
+wait() ­ summary                         wait() wake up
+
+· The wait() system call suspend         fork()                Parent is
+   the calling parent process (Case 1).                        suspended.
+
+· wait() returns and wakes up the                Terminate
+   calling process when the one of its
+   child processes changes from                                   Case 1.
+   running to terminated.
+                                                                  Case 2.
+· wait() does not suspend the
+   calling process (Case 2) if                      wait()
+
+    ­ There were no running children;                                    no suspension
+    ­ There were no children;                                            is needed.
+
+                                         fork() Terminate
+
+                                                         80
+More powerful wait()?
+
+· Limitation of wait()?
+
+   ­ waits for any one of the children
+   ­ Detect child termination only
+
+· How to wait for a particular process?
+
+   ­ waitpid()
+
+                                                                                                                                                                             81
+wait() VS waitpid()
+
+                   wait()                          waitpid()
+Wait for any one of the children.
+                                   Depending on the parameters,
+Detect child termination only.     waitpid() will wait for a particular
+                                   child only.
+
+                                   Depending on the parameters,
+                                   waitpid() can detect child's status
+                                   changing:
+                                   -from running to suspended, and
+                                   -from suspended to running.
+
+For more details, you must read the man pages of wait() and waitpid().
+
+                                                                                                                                                          82
+Summary of Process Operations
+
+· A process is created by cloning
+
+    ­ fork() is the system call that clones processes
+    ­ Cloning is copying
+
+         · What are inherited?
+         · What are not?
+         · Metaphor of father-son relationship
+
+    ­ wait() can be used to suspend the parent process, so as to
+      guarantee the expected execution sequence
+
+· Program execution is fundamental, but not trivial
+
+    ­ A process is the place that hosts a program and run it
+    ­ exec() system call family changes the program that a
+
+      process is running.
+    ­ A process can run more than one program...
+
+         · as long as there is a set of programs that keeps on calling the exec
+            system call family.
+
+                                                                                                                                                                             83
+Summary of Ch3
+
+· Concepts
+
+   ­ Process data in memory
+   ­ PCB
+
+· Operations
+
+   ­ fork(), exec*(), wait()
+   ­ Just introduced how they could be used to create
+
+      processes and execute programs
+   ­ How about the internal working of these system calls?
+
+         · How does the kernel behaves when calling these system calls?
+
+                                                                                                                                                                             84
+End of Chapter 3
+
+                                                                                                                             85
+

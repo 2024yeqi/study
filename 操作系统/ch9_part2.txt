@@ -1,0 +1,1611 @@
+Operating Systems
+
+Prof. Yongkun Li
+- 
+http://staff.ustc.edu.cn/~ykli
+
+                                   Chapter 9, part2
+                                 File System Layout
+
+                                                                                                                                                                          1
+Outline                 Questions.
+                        · Can I read back what I've written?
+            operations  · Can I get back free space when I remove a file?
+                        · How much space is consumed when I create a 1GB file?
+
+                        You're given a disk of 1TB space. How to utilize it?
+
+                   File content &  Directory                                  Allocated
+                     attributes                                                 Space
+
+Things need to be stored.                     Free
+                                              Space
+
+                                                                                         2
+Outline
+
+· We briefly introduce the evolution of the file system
+   layout:
+
+    ­ From a dummy way to advanced ways.
+    ­ The pros and cons are covered.
+
+· We begin to look at some details of the FAT file
+   system and EXT file system
+
+                                                                                                                                                                               3
+How to store data?
+
+· Consider the following case:
+
+    ­ You are going to design the layout of a FS.
+    ­ You are given the freedom to choose the locations
+
+      to store files, including directory files.
+    ­ How will you organize the data?
+
+0  100GB
+
+                                                         4
+How to store data?
+
+· Some (basic) rules are required:
+
+    ­ Every data written to the device must be able to be retrieved.
+
+           · Would you use the FS that will lose data randomly?
+
+    ­ Every FS operation should be done as efficient as possible.
+
+           · Would you use the FS if it takes a minute to retrieve several bytes of
+             data?
+
+    ­ When a file is removed, the FS should free the
+       corresponding space.
+
+           · Would you use the FS if it cannot free any occupied space?
+
+0  100GB
+
+          5
+File System Layout
+
+                                    Trial 1.0
+             The Contiguous Allocation
+
+                                                                                                                                             6
+Trial 1.0 ­ the basics
+
+· Just like a book!
+
+Table of content
+
+Chapter 1            ............ p.1
+Chapter 2            ............ p.2
+Chapter 3            ............ p.10
+
+                                        Book VS Trial #1
+
+                                        Book  Trial #1
+
+                        Chapter               Filename
+
+                        Starting Page         Starting Address
+
+                        NIL                   Ending Address
+
+                                                                7
+Trial 1.0 ­ the basics
+
+· Just like a book!                                Book VS Trial #1
+
+        Suppose we have 3 files to store       Book      Trial #1
+
+        rock.mp3                          Chapter        Filename
+        sweet.jpg
+        same.exe                          Starting Page  Starting Address
+
+        We do not consider the directory  NIL            Ending Address
+        structure at this moment
+                                          Like a book, we need to some space to
+                                          store the table of content, which records
+                                          the filename and the (starting and ending)
+                                          addresses of the file content.
+
+                                                                                      8
+Trial 1.0 ­ the basics
+
+· Just like a book!                             Book VS Trial #1
+
+      The table of content!                     Book  Trial #1
+
+                                       Chapter        Filename
+
+                                       Starting Page  Starting Address
+
+                                       NIL            Ending Address
+
+Filename                     Starting  Ending   File attributes
+                             Address   Address
+rock.mp3
+sweet.jpg                         0      2000
+game.exe                       2001      3456
+                               5000      5678
+
+                                                                        9
+Trial 1.0 ­ the basics
+
+· Just like a book!          Contiguous allocation is very similar to the
+                             way we write a book. It starts with the table of
+      The table of content!  content, which we call the root directory.
+
+Filename                     Starting  Ending   File attributes
+                             Address   Address
+rock.mp3
+sweet.jpg                         0      2000
+game.exe                       2001      3456
+                               5000      5678
+
+    Root                                        game.exe
+
+Directory rock.mp3 sweet.jpg
+
+                                                                               10
+Trial 1.0 ­ the basics
+
+You can locate files easily (with a directory structure).
+
+But, can you locate the allocated space and the free
+space in a short period of time?
+
+Filename   Starting  Ending   Free space is here.
+           Address   Address
+rock.mp3                      But, it needs an O(n) search, where n
+sweet.jpg       0      2000   is the total number of files.
+game.exe     2001      3456
+             5000      5678                What if the disk is large and
+                                           the files are small?
+
+               Root                      game.exe
+
+           Directory rock.mp3 sweet.jpg
+
+                                                                          11
+Trial 1.0 ­ the basics
+
+      File deletion is easy! Space de-allocation is the same as
+      updating the root directory!
+      Yet, how about file creation?
+
+rock.mp3 sweet.jpg  game.exe
+
+                                                                 12
+Trial 1.0 ­ the bad #1
+
+· Suppose we need to write a new, but large file?
+
+Really BAD! We have enough space, but there is no      Any solution?
+holes that I can satisfy the request. The name of the
+problem is called:
+
+                    External Fragmentation
+
+                        ubuntu.iso
+
+                                                       Can't be written!
+
+    Root                                               game.exe
+Directory rock.mp3
+
+                                                                          13
+Trial 1.0 ­ the bad #1
+
+· The defragmentation process may help.
+
+Filename  Starting  Ending     Filename    Starting  Ending
+          Address   Address                Address   Address
+rock.mp3                       rock.mp3
+game.exe       0      2000     game.exe         0      2000
+                               ubuntu.iso    2001      2679
+            5000      5678                    2680      6000
+
+Very expensive (think
+about the disk structure)
+
+                                           ubuntu.iso
+
+              Root   rock.mp3  game.exe                game.exe
+          Directory                        move
+
+                                                                 14
+Trial 1.0 ­ the bad #2
+
+· Comment:
+
+    ­ Also, the growth problem...there is no space
+      for files to grow.
+
+          Growth problem!
+          Can you suggest any method?
+
+                                                                                                                                                                             15
+Trial 1.0 ­ the reality
+
+· This kind of file systems has a name called the
+   contiguous allocation.
+
+· This kind of file system is not totally useless...
+
+    ­ The suitable storage device is something that is...
+    ­ read-only (just like a book)
+
+                                                                                                                                                                             16
+Trial 1.0 ­ the reality
+
+· Can you think of any real life example?
+
+   ­ Hint #1: better not grow any files.
+   ­ Hint #2: OK to delete files.
+   ­ Hint #3: better not add any files; or just add to the
+
+      tail.
+
+   ­ ISO9660.
+
+                                                                                                                                                                             17
+File System Layout
+
+                                 Trial 2.0
+            The Linked List Allocation
+
+                                                                                                                                   18
+From Trial 1.0 to Trial 2.0...
+
+· Lessons learned from Trial 1.0:
+
+    ­ File Size Growth:
+
+         ­ Can we let every file to grow without paying an
+           experience overhead?
+
+    ­ External fragmentation:
+
+         ­ Can we reduce its damage?
+
+· One goal
+
+   ­ To avoid allocating space in a contiguous manner!
+
+                                                                                                                                                                             19
+Trial 2.0 ­ the basics
+
+· How?
+
+   ­ The first undesirable case in trial 1.0 is to write a
+      large file (as it may fail or need defragmentation)
+
+   ­ So, can we write small files/units only?
+
+         · For large files, let us break them into small pieces...
+
+                    ubuntu.iso
+
+    Root                        game.exe
+Directory rock.mp3
+
+                                                                    20
+Trial 2.0 ­ the basics
+
+· How?
+
+   ­ The second undesirable case in trial 1.0 is when
+      file grows (as it needs reallocation)
+
+   ­ So, how can we support dynamic growth?
+
+         · Let's borrow the idea from the linked list...
+
+                                                                                                                                                                             21
+Trial 2.0 ­ the basics
+
+· Linked list allocation...
+
+    ­ Step (1): Chop the storage device into equal-
+    sized blocks.
+
+                                                                                                                                                                             22
+Trial 2.0 ­ the basics
+
+· Linked list allocation...
+
+    ­ Step (2): Fill the new file into the empty space in a
+    block-by-block manner.
+
+    Root         ubuntu.iso
+Directory
+                           21
+              1
+                                                                             23
+Trial 2.0 ­ the basics
+
+· Linked list allocation...
+
+­ Step (3): The root directory...
+
+    · becomes strange/complicated.
+
+Filename    Sequence         Sequence    Since a directory file is an
+            of Block #       of Block #  array, it is difficult to pretend
+rock.mp3                                 to be a linked list....
+game.exe         1-6            NULL
+ubuntu.iso     19-25            NULL          Can we have a better
+                7-18            26-27         solution to optimize
+                                              the directory?
+
+                Root                     21  30
+            Directory
+
+                          1
+
+                                                                            24
+Trial 2.1 ­ the linked list
+
+· Let's borrow 4 bytes from each block.
+
+­ To write the block # of the next block into the first
+  4 bytes of each block.
+
+­ Real linked list                       27 0
+
+How does the root            ......      Block Block
+directory look like?         ......        26 27
+
+                                               NULL
+                                               (or 0)
+
+    Root                     11      21  30
+Directory
+
+              1
+
+                                                       25
+Trial 2.1 ­ the linked list
+
+· Let's borrow 4 bytes from each block.
+
+­ To write the block # of the next block into the first
+  4 bytes of each block.
+
+­ Real linked list                         27 0
+                                         Block Block
+Filename      First          ......
+            Block #          ......        26 27
+rock.mp3
+game.exe        1                              NULL
+ubuntu.iso     19                              (or 0)
+                7
+
+                Root         11      21  30
+            Directory
+
+                          1
+
+                                                       26
+Trial 2.1 ­ the file size
+
+· Note that we need the file size stored in the
+  root directory because...
+  ­ The last block of a file may not be fully filled.
+
+Filename      First    File Size
+            Block #
+rock.mp3                 600M
+game.exe        1       2000M
+ubuntu.iso     19        700M
+                7
+
+                Root
+            Directory
+
+                       1          21  21  30
+
+                                                       27
+Trial 2.1 ­ the free space
+
+· One more thing: free space management.
+
+   ­ Extra data is needed to maintain a free list.
+
+We can also maintain                                0
+   the free blocks as a
+   linked list, too.                   21  30
+
+               28
+
+                     F
+                     R Root
+                     E Directory
+                     E
+
+                                    1
+
+                                                       28
+Trial 2.1 ­ the good
+
+· Pros:
+
+      External         Files can grow          Free block
+  fragmentation       and shrink freely.    management is
+problem is solved.                        easy to implement.
+
+F                                         21  30
+R Root
+E Directory
+E
+
+                  1
+
+                                                              29
+Trial 2.1 ­ the bad #1
+
+· Cons:
+
+    ­ Random access performance problem.
+
+           · The random access mode is to access a file at random locations.
+
+­ The OS needs to access a series of blocks before it can
+  access an arbitrary block.
+
+     · Worst case: O(n) number of I/O accesses, where n is the number of
+
+         blocks of the file.
+
+                     Accessed blocks      Target block
+
+F                                     21  30
+R Root
+E Directory
+E
+
+                  1
+
+                                                                              30
+Trial 2.1 ­ the bad #2                                                    Last block
+                                                                          of a file
+· Cons (recall why we record file size?):
+                                                                       0
+    ­ Internal Fragmentation.
+                                                                    UF
+           · A file is not always a multiple of the block size      SR
+           · The last block of a file may not be fill               EE
+                                                                    DE
+             completely.
+
+    ­ This empty space will be wasted since
+       no other files can be allowed to fill such
+       space.
+
+F                                                               21  30
+R Root
+E Directory
+E
+
+                  1
+
+                                                                                      31
+From Trial 2.1 to Trial 2.2
+
+· Can we further improve?
+
+    ­ We know that the internal fragmentation problem
+      is here to stay.
+
+    ­ How about the random access problem?
+
+         · We are very wrong at the very beginning...decentralized
+           next block location
+
+The information about the next block should be centralized
+
+                                                                                                                                                                             32
+Trial 2.2 ­ the FAT
+
+· The only difference between 2.1 and 2.2...
+
+     Trial 2.1  F
+Trial 2.2       R Root
+                E Directory
+                E
+
+                           All the information about the next
+                           block #s are centralized, and it is
+                           called FAT.
+
+      File      F
+Allocation      R Root
+Table (FAT)     E Directory
+                E
+
+                                                                33
+Trial 2.2 ­ the FAT implementation
+
+                                Task: read "ubuntu.iso" sequentially.
+
+      Filename First
+                      Block #
+
+Step  rock.mp3     1
+(1)
+      game.exe 19
+
+      ubuntu.iso   7
+
+         Block # 1 ... 6 7 ... 18 19 ... 25 26 27 28 29 30
+      Next Block # 2 ... 0 8 ... 26 20 ... 0 27 0 29 30 0
+
+            File   F
+      Allocation   R Root
+      Table (FAT)  E Directory
+                   E
+
+                                11  21  30
+
+                                                                       34
+Trial 2.2 ­ the FAT
+
+          Filename First                      Task: read "ubuntu.iso" sequentially.
+                          Block #
+                                    Step (1). Look for the first block # of the file.
+
+SStteepp  rock.mp3     1
+((11))
+          game.exe 19
+
+          ubuntu.iso   7
+
+             Block # 1 ... 6 7 ... 18 19 ... 25 26 27 28 29 30
+          Next Block # 2 ... 0 8 ... 26 20 ... 0 27 0 29 30 0
+
+                File   F
+          Allocation   R Root
+          Table (FAT)  E Directory
+                       E
+
+                                    11  21  30
+
+                                                                                       35
+Trial 2.2 ­ the FAT
+
+      Filename First                              Task: read "ubuntu.iso" sequentially.
+                      Block #
+                                         Step (2). Read the file allocation table to
+Step  rock.mp3     1                     determine the location of the next block.
+(1)
+      game.exe 19              The next block of 7 is 8.
+
+      ubuntu.iso   7
+
+      Step     Block # 1 ... 6 7 ... 18 19 ... 25 26 27 28 29 30
+      (2)   Next Block # 2 ... 0 8 ... 26 20 ... 0 27 0 29 30 0
+
+            File   F
+      Allocation   R Root
+      Table (FAT)  E Directory
+                   E
+
+                                11  21  30
+
+                                                                                         36
+Trial 2.2 ­ the FAT
+
+                                   Task: read "ubuntu.iso" sequentially.
+
+      Filename First               Step (2). Read the file allocation table to
+                      Block #      determine the location of the next block.
+
+Step  rock.mp3     1                                        Note that the next block is not
+(1)                                                          necessarily the adjacent one.
+      game.exe 19
+
+      ubuntu.iso   7
+
+      Step     Block # 1 ... 6 7 ... 18 19 ... 25 26 27 28 29 30
+      (2)   Next Block # 2 ... 0 8 ... 26 20 ... 0 27 0 29 30 0
+
+            File   F
+      Allocation   R Root
+      Table (FAT)  E Directory
+                   E
+
+                                1  11  21  30
+
+                                                                                             37
+Trial 2.2 ­ the FAT
+
+      Filename First                      Task: read "ubuntu.iso" sequentially.
+                      Block #
+                                Step (3). The process stops until the block
+                                with the "next block # = 0".
+
+Step  rock.mp3     1
+(1)
+      game.exe 19
+
+      ubuntu.iso   7
+
+      Step     Block # 1 ... 6 7 ... 18 19 ... 25 26 27 28 29 30
+      (2)   Next Block # 2 ... 0 8 ... 26 20 ... 0 27 0 29 30 0
+
+            File   F
+      Allocation   R Root
+      Table (FAT)  E Directory
+                   E
+
+                                11  21  30
+
+                                                                                 38
+Trial 2.2 ­ the FAT
+
+                     The entire
+                     layout...
+
+                                 39
+Trial 2.2 ­ the lookup
+
+· A point to look into:
+
+    ­ Centralizing the data does not mean that the random
+       access problem will be gone automatically, unless...
+
+    ­ the file allocation table is presented as an array.
+
+       File Allocation Table
+
+   Block # 1 ... 6 7 ... 18 19 ... 25 26 27 28 29 30
+Next Block # 2 ... 0 8 ... 26 20 ... 0 27 0 29 30 0
+
+I know the    I know    So, going to an arbitrary location
+ starting   the width.  is as simple as doing a pointer
+position.               addition operation.
+
+The random access problem can be eased by keeping a cached
+version of FAT inside the kernel.
+
+                                                             40
+Trial 2.2 ­ the lookup
+
+FAT12/16/32               Cached
+   specific             (partial) FAT
+
+ operations
+
+             If this table is partially kept on the cache,
+             then extra I/O requests will be generated
+             in locating the next block #.
+
+                       Block # 1 ... 6 7 ... 18 19 ... 25 26 27 28 29 30
+                    Next Block # 2 ... 0 8 ... 26 20 ... 0 27 0 29 30 0
+
+File Allocation Table (FAT)
+
+                                                                                                                                                                  41
+Trial 2.2 and the reality
+
+· Every file system supported by MSDOS and
+  the Windows family is implementing the linked
+  list allocation.
+
+· The file systems are:
+
+    ­ The FAT family: FAT12, FAT16, and FAT32;
+    ­ The New Technology File System: NTFS.
+
+                                                                                                                                                                             42
+FATs Brief Introduction
+
+· What is the meaning of the numbers (12/16/32)?
+
+   ­ A block is named a cluster.
+    ­ The main difference among all the versions of FAT
+    FS-es is the cluster address size.
+
+   Block # 1 ... 6 7 ... 18 19 ... 25 26 27 28 29 30
+Next Block # 2 ... 0 8 ... 26 20 ... 0 27 0 29 30 0
+
+File Allocation Table      Cluster   Such a size defines the number of
+                       address size
+                                     clusters...
+
+                                                              cluster address size
+
+                                                   2
+
+                                                                                    43
+FATs Brief Introduction
+
+· Cluster address sizes
+
+   File System   FAT12    FAT16       FAT32
+                 12 bits  16 bits  32 bits (28?)
+Cluster address
+      length       4K     64K      256M
+
+   Number of
+     clusters
+
+­ The larger the cluster address size is, the larger
+  the size of the file allocation table.
+
+­ The larger the cluster size is, the larger the size of
+  the disk partition is.
+
+ We will look into more details of FAT32 in later lectures
+
+                                                            44
+Summary of Trial 2.2
+
+· Is FAT a perfect solution...
+
+    ­ Tradeoff: trade space for performance
+
+         · The entire FAT has to be stored in memory so that...
+         · the performance of looking up of an arbitrary block is
+
+           satisfactory.
+
+· Can we have a solution that stands in middle?
+
+    ­ Not store the entire set of block locations in mem...
+    ­ I don't need an extremely high performance in
+
+      block lookups.
+
+                                                                                                                                                                             45
+File System Layout
+
+                                 Trial 3.0
+          The Index-Node Allocation
+
+                                                                                                                                   46
+Back to Trial 1.0-2.2
+
+· File system layout: how to store file and directory
+
+   ­ 1.0: Contiguous allocation (just like a book)
+
+         Two key problems: External fragmentation + file growth
+
+Filename   Starting  Ending   File attributes
+           Address   Address
+rock.mp3
+sweet.jpg       0      2000
+game.exe     2001      3456
+             5000      5678
+
+    Root                      game.exe
+
+Directory rock.mp3 sweet.jpg
+
+                                                                 47
+Back to Trial 1.0-2.2
+
+· File system layout: how to store file and directory
+
+   ­ 2.0: Linked-list allocation: blocking
+
+                   Key problem: complicated root directory
+
+Filename    Sequence         Sequence
+            of Block #       of Block #
+rock.mp3
+game.exe         1-6            NULL
+ubuntu.iso     19-25            NULL
+                7-18            26-27
+
+                Root                     21  30
+            Directory
+
+                          1
+
+                                                            48
+Back to Trial 1.0-2.2
+
+· File system layout: how to store file and directory
+
+   ­ 2.1: Linked-list allocation: blocking + linked list
+
+Key problem: random access problem
+
+Filename      First          ......        27 0
+            Block #          ......      Block Block
+rock.mp3
+game.exe        1                          26 27
+ubuntu.iso     19
+                7                              NULL
+                                               (or 0)
+
+                Root         11      21  30
+            Directory
+
+                          1
+
+                                                          49
+Back to Trial 1.0-2.2
+
+· File system layout: how to store file and directory
+
+   ­ 2.2: Linked-list allocation: centralized next-block # (FAT)
+
+                            Requirement: FAT Caching
+
+                                                                                                                                                                             50
+Trial 2.2 - FAT
+
+· FAT provides a good performance in all aspects
+
+   ­ File creation, file growth/shrink, file deletion ...
+   ­ Random access performance...but requires to
+
+         · cache the FAT
+
+· Balance the tradeoff between Performance and
+  memory space
+
+   ­ Partial caching
+   ­ How?
+
+                                                                                                                                                                             51
+Trial 2.2 - FAT
+
+        We are going to break the FAT into pieces...Trial 3.0
+
+                                                                                                                                                                             52
+Trial 3.0 ­ the beginning
+
+                                        Index node #1  Any problem with
+                                    Block # 1 ... 6    this design?
+                                 Next Block # 2 ... 0
+Filename    Index
+            Node
+rock.mp3
+game.exe                                  Index node #2
+ubuntu.iso                          Block # 19 ... 25
+                                 Next Block # 20 ... 0
+
+                                                       Index node #3
+
+                                     Block #           7 ... 18 26 27
+
+                                 Next Block # 8 ... 26 27 0
+
+Index       F
+Nodes       R Root
+            E Directory
+            E                    11                      21           30
+
+                              1
+
+                                                                          53
+Trial 3.0 ­ the beginning
+
+Filename    Index                       Index node #1  The index nodes are
+            Node                    Block # 1 ... 6    variable-sized.
+rock.mp3                         Next Block # 2 ... 0
+game.exe                                               How to manage them?
+ubuntu.iso
+                                          Index node #2
+                                    Block # 19 ... 25
+                                 Next Block # 20 ... 0
+
+                                                       Index node #3
+
+                                     Block #           7 ... 18 26 27
+
+                                 Next Block # 8 ... 26 27 0
+
+Index       F
+Nodes       R Root
+            E Directory
+            E                    11                      21           30
+
+                              1
+
+                                                                          54
+Trial 3.0 ­ the beginning
+
+· Problems with variable-sized index nodes
+
+   ­ How to locate an index node?
+   ­ How to support file growth...size of index nodes depends
+
+      on file size
+
+            Fix-sized index nodes are preferable, how to achieve?
+
+Index Node 1 Index Node 2   Index Node 3
+
+Index  F
+Nodes  R Root
+       E Directory
+       E                    11            21  30
+
+                         1
+
+                                                  55
+Trial 3.0 ­ the heart
+
+An innovative design                    1st layer of    2nd layer of
+  of the index node,                    indirect        indirect
+     called extent.                     blocks          blocks
+
+Index node structure          ...
+                                                   ...
+Direct Block #0
+                            ...
+Direct Block #1
+
+...                    ...
+
+Direct Block #11
+
+Indirect Block
+
+Double Indirect Block
+
+Triple Indirect Block
+
+Data Block                  Data Block storing
+storing data.               block address.
+
+Detailed structure of the index nodes will be talked later
+
+                                                                                                                                                                56
+Trial 3.0 ­ the two kinds of blocks
+
+    Indirect block                                           Data block
+
+  Stores an array of block addresses.                          Stores file data.
+                                                     Keys
+  An address may point to either a data block or
+  another indirect block.                                           Indirect blocks that
+                                                                    point to indirect blocks
+  However, in a block, all the addresses are either                 Indirect blocks that
+  pointing to indirect blocks or data blocks.                       point to data blocks
+The consequence
+                                                                     Data blocks
+3rd layer  2nd layer  1st layer
+indirect    indirect  Indirect                       Where are the (indirect)
+                                                           blocks stored?
+           Index  F
+           Nodes  R Root                                                                                             57
+                  E Directory
+                  E
+Trial 3.0 ­ the file size
+
+                    How large files can be supported?
+
+                              File size = number of data blocks * block size
+
+Number of direct    12
+blocks
+
+Number of indirect  1         12 x 2x +
+blocks
+                              2x-2 *2x=22x-2 +
+Number of double    1         2x-2 * 2x-2 *2x=23x-4 +
+indirect blocks
+
+Number of triple    1         24x-6
+indirect blocks
+
+                                                 The dominating factor.
+
+Block size          2x bytes
+
+Address length      4 bytes
+
+            "2x / 4=2x-2"            Block size           File size
+            addresses         1024 bytes = 210   approx. 16 Gbytes
+                              4096 bytes = 212   approx. 4 Tbytes
+
+                                                                              58
+Trial 3.0 ­ the final design
+
+Filename    Index                Index node #1                     Now, every index
+            Node                                ...                node is of a fixed
+rock.mp3                                        ...                size.
+game.exe
+ubuntu.iso                                    Index node #2
+                                                              ...
+                                                              ...
+
+                                     Index node #3
+                                                    ...
+                                                    ...
+
+Index       F
+Nodes       R Root
+            E Directory
+            E                    11                                21  30
+
+                              1
+
+                                                                                       59
+Trial 3.0 ­ the final design
+
+Layout & read          Now, this column stores                      Inside the index node table ...
+process                   the index node #.
+
+Filename        Index                      Index        Index       ...  Index
+               Node #                     node #1      node #2
+rock.mp3                                                                 node #n-1
+game.exe           1                              ...          ...
+ubuntu.iso         2                              ...          ...       ...
+                   3
+                                                                         ...
+
+Searching the index                       It is arranged as an array. So,
+nodes using the                           looking up an index node will be fast.
+index node #.
+
+Index Node           F
+    Table            R Root
+                     E Directory
+                     E                                 11                21         30
+
+                                       1
+
+                                                                                                     60
+Trial 3.0
+
+· How about the tradeoff between performance and
+  memory usage?
+
+   ­ Partial caching is easy
+
+· Any overhead of Trial 3.0?
+
+   ­ The index-node allocation uses more storage:
+
+         · to trade for a larger file size (with fixed-size index
+           nodes).
+
+   ­ The indirect blocks are the extra things.
+
+                                                                                                                                                                             61
+Trial 3.0 ­ Storage Overhead
+
+· The indirect blocks are the extra things.
+
+                                                                       ~4M (x=12)
+                                                                          1 block
+
+                                                                         ~4G (x=12)
+
+                                                                         ~1K blocks
+
+                                                                                                                                                                             62
+Trial 3.0 ­ Storage Overhead
+
+· The indirect blocks are the extra things.
+
+                                                                   ~4T (x=12)
+
+                                                                  ~1M blocks
+
+                                                                                                                                                                             63
+Trial 3.0 ­ Storage Overhead
+
+· The indirect blocks are the extra things.
+
+    ­ Max. number of indirect blocks depends on
+
+         · Block size
+         · File size
+
+      Block size  Max. # of indirect       Max. Extra Size
+                         blocks                 involved
+1024 bytes = 210
+4096 bytes = 212     approx. 216      approx. 256 Mbytes
+
+                     approx. 220       approx. 4 Gbytes
+
+                  Remember, they are not static and
+                  they grow/shrink with the file size.
+
+                                                                                                                                64
+Trial 3.0 ­ the summary
+
+· FSes in UNIX and Linux use the index-node
+  allocation method.
+
+    ­ The Ext2/3/4 file systems.
+
+         · The index node is called inode in those systems.
+         · Ext4 uses extent, not indirect blocks
+
+   ­ We will discuss the details of Ext file system later.
+
+                                                                                                                                                                             65
+From Trial 1.0 to Trial 3.0...
+
+· We studied what are the possible ways to store
+  data in the storage device.
+
+   ­ The things stored are usually:
+
+Root directory                  File attributes
+
+Hey, where are the sub-directories? Except the file size and the
+
+                                locations of the data blocks,
+
+Still remember the directory traversal where and what are the other
+                                                  attributes?
+
+Free space management           Data block management
+
+Actually, we didn't cover that  The FAT, the extents, the table of
+much...                         content.
+
+Index Node      F
+      Table     R Root
+     or FAT     E Directory
+                E
+
+                                                                     66
+File System Layout
+
+                    Root Directory and
+                        Sub-directories
+
+                                                                                                                                   67
+Root directory
+
+· We know that the root directory is vital.
+
+    ­ However, we have sub-directories...
+    ­ Where are they?
+
+                         Filename Index           Filename First
+                                          Node #                  Block #
+
+                         rock.mp3    1            rock.mp3    1
+
+                         game.exe    2            game.exe 19
+
+                         ubuntu.iso  3            ubuntu.iso  7
+
+                         temp_dir    ?            temp_dir    ?
+
+Are the sub-directories              Index Node               Linked list
+stored here?                         Allocation               Allocation
+
+                                                                           68
+Sub-directories?
+
+· Let's take the index-node allocation as an example...
+
+                  Root directory is a directory file.
+
+Directory File
+
+Filename inode #                   Index node
+                      Direct Block #0
+rock.mp3    1         Direct Block #0
+
+game.exe    19       Direct Block #11          File content ... of
+                       Indirect Block          the directory file
+ubuntu.iso  7
+                  Double Indirect Block
+temp_dir    100    Triple Indirect Block
+
+Directory is also a file, so it has an inode too
+
+                                                                    69
+Sub-directories?
+
+· Let's take the index-node allocation as an example...
+
+                  Root directory is a directory file.
+
+Directory File
+
+Filename inode #               Index node
+                  Direct Block #0
+rock.mp3    1     Direct Block #0
+
+game.exe    19
+
+ubuntu.iso  7     Directory File
+
+temp_dir    100   Direct Bfliolecnkam#1e1 inode #
+
+                  Indirect Bfilelo_cak  123        Just another
+                                                   directory file.
+                  Double Indiredicr_t1Block 345
+
+                  Triple Indireficlet_Bblock 456
+
+                  dir_2                 567
+
+See, each directory entry keeps the address of the file attributes,
+   not the attributes themselves (how about FAT file systems?)
+
+                                                                                                                                                                 70
+Traversing directory structure...
+
+· Let's take index-node allocation as an example...
+
+                            Index node   File contents
+                       Direct Block #0
+
+  Root Directory File  Direct Block #11                              Index node     File
+Filename inode #                                               Direct Block #0   contents
+                        Indirect Block
+ File                                                          Direct Block #11
+                       Double Indirect                          Indirect Block
+  Dir                         Block                            Double Indirect
+                                                                      Block
+                        Triple Indirect                         Triple Indirect
+                              Block                                   Block
+
+     Index node                            Sub-Directory File
+Direct Block #0                          Filename inode #
+
+Direct Block #11                                                                          The tree ends at the
+                                                                                           non-directory files.
+ Indirect Block
+                                         Content of a directory file is still
+Double Indirect                                    a directory file
+       Block
+
+ Triple Indirect
+       Block
+
+                                                                                                                 71
+Traversing directory structure...
+
+· Work together with the layout
+
+    ­ Let's still take index-node allocation as an example...
+    ­ E.g.: "/file"
+
+            Root Directory File                          File contents
+
+            Filename inode #
+
+            file  123
+
+            ...   ...
+
+                                 Index node structure
+
+                                 Direct Block #0
+
+            F                    Direct Block #0         ...
+            R Root
+Index Node  E Directory             Direct Block #11
+    Table   E                         Indirect Block
+
+                                 Double Indirect Block
+
+                                  Triple Indirect Block
+
+                                                                        72
+Traversing directory structure...
+
+· Work together with the layout
+
+    ­ Let's still take index-node allocation as an example...
+    ­ E.g.: "/os/file"
+
+                                                         Sub-directory File
+
+                                                  Filename inode #
+
+            Root Directory File                          file       456
+
+            Filename inode #                             ...        ...
+
+            file  123
+
+            os/   124
+
+                                 Index node structure
+
+                                 Direct Block #0
+
+            F                    Direct Block #0               ...
+            R Root
+Index Node  E Directory             Direct Block #11
+    Table   E                         Indirect Block
+
+                                 Double Indirect Block
+
+                                  Triple Indirect Block
+
+                                                                             73
+Traversing directory structure...
+
+· Work together with the layout
+
+    ­ Let's still take index-node allocation as an example...
+    ­ E.g.: "/os/file"
+
+            File contents
+
+                                                 Sub-directory File
+
+                                          Filename inode #
+
+                                                 file       456
+
+                                                 ...        ...
+
+                         Index node structure
+
+                         Direct Block #0
+
+            F            Direct Block #0               ...
+            R Root
+Index Node  E Directory     Direct Block #11
+    Table   E                 Indirect Block
+
+                         Double Indirect Block
+
+                          Triple Indirect Block
+
+                                                                     74
+File System Layout
+
+              File system information
+                       and partitioning
+
+                                                                                                                                   75
+Storage layout
+
+· What are stored on disk?
+
+   ­ Root directory, index nodes/FAT, data blocks, free
+     space information...
+
+   ­ Others?
+
+       · E.g., How do we know where the root directory is?
+       · Where is the first inode?
+
+   ­ File system information
+
+Index  F
+Nodes  R Root
+       E Directory
+       E
+
+                    76
+File System Information
+
+· It is a set of important, FS-specific data...
+
+                                      Examples of FS-Specific Data
+                 How large is a block?
+                 How many allocated blocks are there?
+                 How many free blocks are there?
+                 Where is the root directory?
+                 Where is the allocation information, e.g., FAT & inode table?
+                 How large is the allocation information?
+
+                                                                                                                                                                             77
+File System Information
+
+· It is a set of important, FS-specific data...
+
+    ­ Can we hardcode those information in the
+      kernel code...
+
+    ­ No!!! Because different storage devices have
+      different needs.
+
+E.g., different disk      FAT  F
+sizes result in       FAT      R Root
+different FAT sizes.           E Directory
+                               E
+
+                               F
+                               R Root
+                               E Directory
+                               E
+
+                                                    78
+File System Information
+
+· It is a set of important, FS-specific data...
+
+    ­ Solution: The workaround is to save those information
+    on the device.
+
+Each device should has its own
+       copy of information.
+
+FS-Specific                     F
+Information FAT                 R Root
+                                E Directory
+FS-Specific  FAT                E
+
+Information                     F
+                                R Root
+                                E Directory
+                                E
+
+                                                             79
+File System Information
+
+· It is a set of important, FS-specific data...
+
+   ­ Solution: The workaround is to save those information
+   on the device.
+
+                         In FAT* & NTFS Boot Sector
+
+                         In Ext*      Superblock
+
+Boot Sector        FAT   F
+Superblock   Index Node  R Root
+                         E Directory
+                         E
+
+                         F
+                         R Root
+                         E Directory
+                         E
+
+                                                            80
+Story so far...
+
+· We talked about the file system layout
+
+   ­ FAT and index node
+
+Boot Sector        FAT   F
+Superblock   Index Node  R Root
+                         E Directory
+                         E
+
+                         F
+                         R Root
+                         E Directory
+                         E
+
+Only one file system can be stored in a disk?  No!
+
+What is the problem with a very large file system? Large FAT
+
+                                                              81
+Disk partitions
+
+· Partitioning is needed to
+
+   ­ limit the file system size
+   ­ support multiple file systems on a single disk
+
+partition 1  partition 2
+
+                                                     82
+Disk partitions
+
+· What is a disk partition?
+
+   ­ A disk partition is a logical space...
+
+         · A file system must be stored in a partition.
+         · An operating system must be hosted in a partition.
+
+Boot Code:                         A partition table stores the
+the code specifies                 - first sector,
+which partition to boot.           - the length, and
+                                   - the type of a partition.
+                                C
+                               O   partition 1  partition 2
+                               D
+                               E
+
+                                                                 83
+Master boot record (MBR)...
+
+                             512 bytes                               signature
+
+BOOT CODE    Table             Table      Table     Table   0xAA55
+446 bytes  Entry #1          Entry #2   Entry #3  Entry #4
+
+                             16 bytes                       2 bytes
+
+The range of a partition is  Bytes           Partition Table Entry
+described by the: (offset,   0-0    Description
+length) tuple.               1-3    Bootable flag; 0x80 means bootable.
+                             4-4    Starting CHS address
+                                    Partition type
+                             5-7
+                             8-11   http://www.datarecovery.com/hexcodes.asp
+                             12-15
+                                    Ending CHS address
+                                    Starting LBA address (measured in # of sectors)
+                                    Sizes in sectors
+
+                                                                                     84
+Disk partitions - summary
+
+· Benefits of partitioning:
+
+   ­ Performance
+
+         · A smaller file system is more efficient!
+
+                ­ Think about FAT32.
+
+   ­ Multi-booting
+
+         · You can have a Windows XP + Linux + Mac installed on a single
+           hard disk (not using VMware).
+
+   ­ Data management
+
+         · You can have one logical drive to store movies, one logical
+           drive to store the OS-related files, etc.
+
+                                                                                                                                                                             85
+Final view of a disk storage space
+
+· Final view of disk layout                                   partition 2
+
+                                                 partition 1
+
+C                                                             Super inode
+                                                              block Table
+O   Boot   FAT
+D  Sector
+
+E
+
+· Now, do you know what is meant by "formatting" a
+  disk?
+
+    ­ Create and initialize a file system!
+    ­ In Windows, we have "format.exe".
+    ­ In Linux, we have "mkfs.ext2", "mkfs.ext3", etc.
+
+                                                                                                                                                                             86
+Summary of part2
+
+· We have looked into many details about different
+   file system layouts:
+
+    ­ Contiguous allocation;
+    ­ Linked list allocation; and
+    ­ Index-node allocation.
+
+· We also show the complete view of disk space
+
+    ­ File system specific information & disk partition
+
+· Linked list allocation and index-node allocation are the
+   main streams but not the only way to implement
+   modern file systems.
+
+                                                                                                                                                                             87
+So far, we have learnt:
+
+What are stored on disk                     How to access them?
+
+File: content + attributes  File operations: open(), read(), write()
+Directory: Directory file   Directory lookup: Directory traversal
+
+                            How are the files stored on disk?
+File system layout: Contiguous/linked-list (FAT)/index-node allocation
+Topics not covered:
+Only the attributes of file name and locations are covered, how about other
+attributes? Free space management?
+We'll look into some real implementations (FAT32 + EXT2/3/4)
+
+                                                                                                                                                                      88
+

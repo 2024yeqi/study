@@ -1,0 +1,2586 @@
+Operating Systems
+Prof. Yongkun Li -  http://staff.ustc.edu.cn/~ykli
+Ch7, part 2 Memory Management from the Kernel's Perspective:
+Virtual Memory Support
+1
+
+Memory management
+
+Local variable
+Dynamically-allocated memory
+Global variable
+Code + constants
+
+How to use the addresses to access the memory device?
+How do multiple process share the same physical memory device?
+How to support large process?
+How does the CPU read what it wants from the memory device?
+......
+
+Process
+
+The kernel and the hardware are doing lots of managements...
+2
+
+Memory Management - Virtual memory; - MMU implementation & paging; - Demand paging; - Page replacement algorithms; - Allocation of frames;
+3
+
+CPU working ­ illustration that you may know
+· Let's review the "fetch-decode-execute" cycle!
+
+PC 0xABCDEF00 EAX 0x00000000
+
+memory bus
+0xABCDEF00
+
+instruction
+
+This instruction says: "Move the memory value in 0x12345678 to the register EAX".
+mov 0x12345678 %EAX
+
+0x12345678
+
+an integer
+
+The integer value: 0x0000000A
+
+4
+
+CPU working ­ illustration that you may know
+· Let's review the "fetch-decode-execute" cycle!
+
+2 CPU decodes
+
+memory bus
+
+PC 0xABCDEF00 EAX 00xx000000000000000A
+
+0xABCDEF00 0x12345678
+
+How to use the addresses?
+
+3 1
+instruction
+
+This instruction says: "Move the memory value in 0x12345678 to the register EAX".
+mov 0x12345678 %EAX
+
+an integer
+
+The integer value: 0x0000000A
+
+5
+
+"You've been living in a dream world, Neo"
+
+int main(void) { int pid; pid = fork(); printf("PID %d: %p.\n", getpid(), &pid); if(pid) wait(NULL); return 0;
+}
+
+$ ./same_addr PID 1234: 0xbfe85e0c. PID 1235: 0xbfe85e0c. $_
+
+· Can you guess the result?
+­ Two different processes, the same variable name, carry different values
+­ Use the same address! (What? How COME?!)
+· Well, what is the meaning of a memory address?!
+­ Logical address: virtual memory ­ Address translation needed (logical/virtual->physical)
+· Why we use virtual memory??
+
+6
+
+CPU working ... contiguous allocation?
+· Each process is contained in a single section of mem
+Process C Hole
+Process B Hole
+Process A
+7
+
+CPU working ... contiguous allocation?
+· Problem #1...
+
+Process C Hole
+Process B Hole
+Process A
+
+We also know that a process' memory can grow.
+So, does a process always have a chance to grow to reach its need?
+memory growth e.g., because of brk() calls
+
+8
+
+CPU working ... contiguous allocation?
+
+· Problem #2...
+
+We are not talking about the program's size, but the process' size!
+
+What iPf rwoecehsasvCe a process that is larger that the physical mHoelme ory?
+Process B
+
+What the CPU (or OS) can do is to give up running ...
+So, we need to have the CPU design that can understand processes so that:
+
+Hole Process A
+
+(1) the address space is no longer required to be contiguous.
+(2) it allows a process to have a size beyond the physical memory.
+
+9
+
+Virtual memory support in modern CPUs
+· The new design of the CPU includes a new module: the memory management unit (MMU).
+­ MMU is designed to perform address translation. ­ The MMU is an on-CPU device.
+10
+
+Virtual memory ­ how does it work?
+· Step 1. When CPU wants to fetch an instruction, the virtual address is sent to MMU and is translated into a physical address.
+
+0xAAAAAA00
+
+PC 0xABCDEF00 EAX 0x00000000
+
+MMU
+0xABCDEF00
+
+0xAAAAAA00
+
+mov 0x12345678 %EAX 0x0000000A
+
+11
+
+Virtual memory ­ how does it work?
+· Step 2. The memory returns the instruction addressed in physical address.
+
+0xAAAAAA00
+
+PC 0xABCDEF00 EAX 0x00000000
+
+MMU
+0xABCDEF00
+
+mov 0x12345678 %EAX
+
+Physical Address
+0xAAAAAA00
+
+0x0000000A
+
+12
+
+Virtual memory ­ how does it work?
+· Step 3. The CPU decodes the instruction.
+­ An instruction always stores virtual addresses, but not physical addresses.
+
+0x13579A00
+
+PC 0xABCDEF00 EAX 0x00000000
+
+MMU
+0x12345678
+
+mov 0x12345678 %EAX
+
+mov 0x12345678 %EAX
+
+Physical Address
+0xAAAAAA00
+
+0x0000000A
+
+13
+
+Virtual memory ­ how does it work?
+· Step 4. With the help of the MMU, the target memory is retrieved.
+
+0x13579A00
+
+PC 0xABCDEF00 EAX 00xx000000000000000A
+
+MMU
+0x12345678
+
+mov 0x12345678 %EAX
+
+mov 0x12345678 %EAX
+
+Physical Address
+0xAAAAAA00
+
+0x0000000A
+
+0x13579A00
+
+14
+
+Virtual memory ­ What is the good?
+· Merit 1. Different processes use the same virtual addresses, they may be translated to different physical addresses.
+­ Recall the "pid" variable in the example using fork(). ­ The address translation helps the CPU to retrieve data in a non-
+contiguous layout (the process address space is contiguous ).
+
+Virtual Address Physical Address
+
+Process X
+
+0x12345678
+
+0x2468CD00
+
+Process Y
+
+0x12345678
+
+0x13579A00
+
+Proc X: 0x00000000A Proc Y: 0x00000000B
+15
+
+Virtual memory ­ What is the good?
+· Merit 2. Memory sharing can be implemented!
+­ This is how threads share memory! ­ This is how different processes share codes! (HOW?)
+
+PC 0xABCDEF00
+Process X
+
+Virtual Address Physical Address
+
+0xABCDEF00 0x12345678
+
+0xAAAAAA00 0x2468CD00
+
+Process Y
+
+0xABCDEF00 0x12345678
+
+0xAAAAAA00 0x13579A00
+
+mov 0x12345678 %EAX Proc X: 0x00000000A Proc Y: 0x00000000B
+16
+
+Virtual memory ­ What is the good?
+· Merit 3. Memory growth can be implemented!
+­ When the memory of a process grows, the newlyallocated memory is not required to be contiguous
+17
+
+Memory Management - Virtual memory; - MMU implementation & paging; - Demand paging; - Page replacement algorithms; - Allocation of frames;
+18
+
+MMU implementation
+· How to implement the MMU?
+­ How to efficiently translate from virtual address to physical address?
+­ Translation is needed for every process
+
+MMU
+
+Process X
+
+Virtual Address Physical Address
+
+0xABCDEF00 0x12345678
+
+0xAAAAAA00 0x2468CD00
+
+Process Y
+
+0xABCDEF00 0x12345678
+
+0xAAAAAA00 0x13579A00
+
+19
+
+MMU implementation ­ a translation table
+· So, can translation be done by a lookup table?
+­ Remember, every process needs its own lookup table.
+(Do you remember the reason?)
+
+MMU
+Lookup table
+What is the problem with this method?
+
+translation
+
+Virtual address
+0x00000000 0x00000001
+...... 0xFFFFFFFF
+
+Physical Address
+0x01234567 0x452796AB
+...... 0x6714EFD8
+
+Lookup Table internals
+
+20
+
+MMU implementation ­ a translation table
+· Then, how large is the lookup table?
+
+How many addresses are there? 232
+
+How large is an address? 4 bytes
+
+Size of the lookup table = Number of addresses
+x Size of an address
+232 x 4 bytes = 16 Gbytes
+
+Only this column is stored.
+
+Virtual address
+0x00000000 0x00000001
+...... 0xFFFFFFFF
+
+Physical Address
+0x01234567 0x452796AB
+...... 0x6714EFD8
+
+Lookup Table internals
+
+21
+
+MMU implementation ­ a translation table
+· Then, how large is the lookup table?
+
+How many addresses are there? 232
+
+How large is an address? 4 bytes
+
+Size of the lookup table = Number of addresses
+x Size of an address
+232 x 4 bytes = 16 Gbytes
+
+Can we reduce the table size?
+Note. Every address in a CPU is always of 4 bytes.
+The only choice is to reduce the number of addresses
+
+22
+
+MMU implementation ­ a partial lookup table
+
+Size of the lookup table = Number of addresses
+x Size of an address
+220 x 4 bytes = 4 Mbytes
+Note. Every address in a CPU is always of 4 bytes although you only use 20 bits.
+
+Virtual address
+
+20 bits
+
+12 bits
+
+Lookup table
+
+unchanged
+
+Physical address
+
+20 bits
+
+12 bits
+
+MMU internals
+
+23
+
+MMU implementation ­ paging
+
+· This technique is called paging.
+
+Virtual Page Address
+
+Page offset
+
+­ This partitions the memory into fixed blocks called pages.
+­ The lookup table inside the MMU is now called the page table.
+
+20 bits
+
+12 bits
+
+Page table
+
+unchanged
+
+20 bits
+
+12 bits
+
+Physical Page Address
+
+24
+
+Paging - properties
+Size = 4096 bytes (or 4KB)
+
+Virtual Page address
+
+Page offset
+
+20 bits
+
+12 bits
+
+25
+
+Paging - properties
+
+Selected address
+Selected page
+
+Size = 4096 bytes (or 4KB)
+
+Virtual Page address
+
+Page offset
+
+20 bits
+
+12 bits
+
+Page table
+
+unchanged
+
+20 bits
+
+12 bits
+
+Physical Page address
+26
+
+Paging - properties
+· Adjacent virtual pages are not guaranteed to be mapped to adjacent physical pages.
+
+Virtual Address
+0x12345 000 0x12345 001 ...... ... 0x12345 FFF 0x12346 000 0x12346 001 ...... ... 0x12346 FFF
+Continuous addresses
+
+Physical Pages
+0x54321 000 0x54321 001 ...... ... 0x54321 FFF
+0x09394 000 0x09394 001 ...... ... 0x09394 FFF
+
+Contiguous virtual addresses map to non-contiguous physical address.
+Virtual addresses within the same page are always mapped to the same physical page.
+
+27
+
+Paging ­ memory allocation
+· How to do memory allocation with paging
+
+1 char *prev_ptr = NULL;
+
+2 char *ptr = NULL;
+
+3
+
+4 void handler(int sig) {
+
+5
+
+printf("Page size = %d bytes\n",
+
+6
+
+(int) (ptr - prev_ptr));
+
+7
+
+exit(0);
+
+8}
+
+9 int main(int argc, char **argv) {
+
+10
+
+char c;
+
+11
+
+signal(SIGSEGV, handler);
+
+12
+
+prev_ptr = ptr = sbrk(0); // find the heap's start.
+
+13
+
+sbrk(1);
+
+// increase heap by 1 byte?
+
+14
+
+while(1)
+
+15
+
+c = *(++ptr);
+
+16 }
+
+28
+
+Paging ­ memory allocation
+· A page is the basic unit of memory allocation.
+The allocation is in a page-by-page manner. The same case for the growth of the stack.
+29
+
+Paging ­ memory allocation
+
+· Problem???
+
+­ The minimum allocation unit is 4,096 bytes.
+
+­ But, the process cannot use that much. ­ So, the rest of the page is unused.
+
+Allocated Stack
+grow
+Unallocated Zone
+
+Internal fragmentation means space is avoidably wasted when allocation is done in a page-by-page manner.
+
+Unused Used Heap
+
+grow
+Allocated Heap
+BSS
+
+Data
+
+Code + Constant
+
+30
+
+Paging ­ internal fragmentation
+
+How about letting another process to use the "unused space"?
+
+Allocated Stack
+grow
+Unallocated Zone
+
+The MMU has to memorize that none of the processes could occupy the whole page. The growth of the usage has to be limited and monitored!
+
+grow
+Allocated Heap
+
+Unused
+
+BSS
+
+Used Heap
+
+Allocated Stack
+grow
+Unallocated Zone
+grow
+Allocated Heap
+BSS
+
+Data
+
+Data
+
+Code + Constant Internal fragmentation is here to stay... Code + Constant
+
+31
+
+Paging ­ putting it together
+
+Physical Devices
+
+Allocated Pages
+
+D
+
+G
+
+A
+
+B
+
+E
+
+C
+
+F
+
+Memory pages are then distributed on the physical memory or the swap area, i.e., the hard disk.
+
+G F E D C B A
+Allocated memory are broken into pages.
+Unallocated zone does not occupy any pages.
+
+Memory Space
+Allocated Stack
+grow
+Unallocated Zone
+grow
+Allocated Heap
+BSS Data Code + Constant
+32
+
+Paging ­ page table design
+Physical Devices · So, next waves of questions are:
+
+D
+
+G
+
+A
+
+B
+
+E
+
+C
+
+F
+
+Memory pages are then distributed on the physical memory or the swap area, i.e., the hard disk.
+
+­ Who can tell which virtual page is allocated?
+­ Who can tell which page is on which device?
+· Those questions can be answered by the design of the page table.
+
+33
+
+Paging ­ page table design
+· How to design the page table?
+­ First of all, which information need to be maintained?
+· Mapping from virtual pages to physical pages (called frames) · Permission information · Where is the page (in memory or not)
+­ Second...
+· Each process needs one page table
+34
+
+Paging ­ page table design
+
+Page Table of Process A
+
+Virtual Page # Permission Valid-invalid bit Frame #
+
+A
+
+rwx-
+
+1
+
+0
+
+B
+
+NIL
+
+0
+
+NIL
+
+C
+
+r--s
+
+1
+
+2
+
+D
+
+NIL
+
+0
+
+NIL
+
+...
+
+...
+
+...
+
+...
+
+For the sake of convenience, we don't use addresses here. Also, this column is not stored in the page table.
+
+The physical memory is just an array of frames. The size of a frame is 4KB.
+This row means the virtual page "A" is mapped to the physical frame "0".
+This row, with NIL, means the virtual page "D" is not allocated.
+Remember, the entire 4G memory zone is usually not fully utilized.
+
+35
+
+Paging ­ page table design
+
+Page Table of Process A
+
+Virtual Page # Permission Valid-invalid bit Frame #
+
+A
+
+rwx-
+
+1
+
+0
+
+B
+
+NIL
+
+0
+
+NIL
+
+C
+
+r--s
+
+1
+
+2
+
+D
+
+NIL
+
+0
+
+NIL
+
+...
+
+...
+
+...
+
+...
+
+This bit is to tell the CPU whether this row is valid or not.
+If the row is invalid, it means that the virtual page is not in the memory.
+Note. This is not the same as an unallocated page.
+
+1 ­ valid, in memory. 0 ­ invalid, not in memory.
+36
+
+Paging ­ page table design
+
+How does the CPU check if you can write to a memory zone?
+
+Page Table of Process A When a virtual address is translated
+Virtual Page # Permission Valid-invalid bit Frameto#an unallocated frame...
+
+A
+
+rwx-
+
+B
+
+NIL
+
+C
+
+r--s
+
+D
+
+NIL
+
+...
+
+...
+
+1
+
+0
+
+OR
+
+0
+
+NIL
+
+When you write to read-only pages...
+
+1
+
+2
+
+OR
+
+0
+
+NIL
+
+...
+
+...eWxheceuntayobuletpryagteose...xecute a non-
+
+s ­ means sharable.
+
+SEGMENATION FAULT!!
+
+37
+
+Paging ­ page table design
+· Other design issues
+How to store the page table if it is large (structure of page table)?
+How to improve memory access performance (page table look incurs large overhead)? Caching: Translation lookaside buffer (TLB)
+38
+
+Paging ­ page table structure
+· The page table may be large...multiple MBs
+­ We would not want to allocate the page table contiguously in memory, how?
+­ Divide the page table into pieces
+Two-level page table
+39
+
+Paging ­ page table structure
+· The page table may be large...multiple MBs
+­ We would not want to allocate the page table contiguously in memory, how?
+­ Divide the page table into pieces
+Besides hierarchical paging, we can also use
+Hashed page tables
+Inverted page tables
+40
+
+Paging ­ Performance Boost
+· Memory access requires to look up page table
+­ This overhead is even larger with multi-level page tables ­ Any solution? ­ (1) large pages
+· Reduce the page table entries · Cons?
+­ Internal fragmentation ­ Deduplication
+41
+
+Paging ­ Performance Boost
+· Memory access requires to look up page table
+­ This overhead is even larger with multi-level page tables ­ Any solution? ­ (2) Caching
+Translation lookaside buffer (TLB)
+The search in TLB is fast: Part of the instruction pipeline
+The size of TLB is small: e.g., 32-1024 entries
+42
+
+Paging ­ Performance Boost
+· Memory access requires to look up page table
+­ This overhead is even larger with multi-level page tables ­ Any solution? ­ (2) Caching
+Effective memory-access time Example
+· Hit ratio: 80% · Mem access time: 100 ns · One mem access for page table lookup
+Effective mem-access time is 0.8*100+0.2*(100+100)=120ns
+43
+
+Paging ­ summary
+· Virtual memory (VM) is just a table-lookup implementation. The specials about VM are:
+­ The table-lookup is implemented inside the CPU, i.e., a hardware solution.
+­ Each process should have its own page table.
+44
+
+Paging ­ summary
+· How about the OS?
+­ The OS stores and manages the page tables of all processes.
+45
+
+Paging ­ summary
+· We talked about segmentation in part 1...
+­ Address mapping can also be done in segments
+· Also permits physical address space of a process to be noncontiguous
+· But usually incurs severe fragmentation in both memory and backing store
+· Paging is used in most operating systems
+­ Hybrid scheme is also possible
+46
+
+Memory Management - Virtual memory; - MMU implementation & paging; - Demand paging; - Page replacement algorithms; - Allocation of frames;
+47
+
+Memory / page allocation?
+
+· The stack and the heap will grow:
+­ (1) calling brk(), i.e., the heap grows; ­ (2) calling nested function calls, i.e., the
+stack grows;
+
+Allocated Stack
+grow
+Unallocated Zone
+grow
+Allocated Heap
+
+· The question is...
+­ When will the memory be allocated for you when you call malloc()?
+
+BSS Data Code + Constant
+
+48
+
+Remember the OOM generator?
+
+#define ONE_MEG 1024 * 1024
+
+int main(void) {
+
+void *ptr;
+
+int counter = 0;
+
+This program runs very fast,
+
+while(1) {
+
+why?
+
+ptr = malloc(ONE_MEG);
+
+if(!ptr)
+
+break;
+
+counter++;
+
+printf("Allocated %d MB\n", counter);
+
+}
+
+return 0; }
+
+49
+
+Memory / allocation ­ demand paging
+
+· The reality is: allocation is done in a lazy way!
+­ The system only says that the memory is allocated. ­ Yet, it is not really allocated until you access it.
+
+1 #define BUF_SIZE 512 * 1024
+
+2 void re() {
+
+3
+
+char buf[BUF_SIZE];
+
+4
+
+while( getchar() != '\n' );
+
+5
+
+memset(buf, 0, sizeof(buf));
+
+6
+
+while( getchar() != '\n' );
+
+7
+
+re();
+
+8}
+
+9
+
+10 int main(void) {
+
+11
+
+re();
+
+12
+
+return 0;
+
+13 }
+
+This statement does not involve any memory access.
+So, the virtual address space is allocated, but the page is not allocated yet.
+This statement really accesses the "allocated" memory.
+So, this statement really asks the system to allocate memory.
+
+50
+
+Memory / allocation ­ demand paging
+
+· How about the heap?
+
+1 #define ONE_MEG (1024 * 1024)
+
+2 #define COUNT 1024
+
+3
+
+4 int main(void) {
+
+5
+
+int i;
+
+6
+
+char *ptr[COUNT];
+
+7
+
+for(i = 0; i < COUNT; i++)
+
+8
+
+ptr[i] = malloc(ONE_MEG);
+
+9
+
+10
+
+for(i = 0; i < COUNT; i++) {
+
+11
+
+while(getchar() != '\n');
+
+12
+
+memset(ptr[i], 0, ONE_MEG);
+
+13
+
+}
+
+14 }
+
+grow_heap.c
+
+As a matter of fact, malloc() does not involve any memory allocation, only involving the allocation of the virtual address page.
+So, this loop is only for enlarging the virtual page allocation.
+This statement really accesses the "allocated" memory.
+So, this statement really asks the system to allocate memory.
+
+This lazy way is called demand paging, but how does it work?
+
+51
+
+Demand paging ­ illustration.
+
+Assumption: 1 process only.
+
+· Let's consider the "grow_heap.c" example.
+­ Suppose that a process initially has 4 page frames. ­ We are now in the memset() for-loop in Lines 10 - 13.
+
+Virtual page #
+
+Bit
+
+Frame #
+
+7
+
+A
+
+1
+
+0
+
+6
+
+... ...
+
+...
+
+5
+
+D
+
+1
+
+3
+
+4 3
+
+E
+
+0
+
+NIL
+
+2
+
+... ...
+
+...
+
+1
+
+0
+
+MMU
+
+OS kernel
+52
+
+Demand paging ­ illustration.
+
+Assumption: 1 process only.
+
+· When memset() runs,
+­ the MMU finds that a virtual page involved is invalid, ­ the CPU then generates an interrupt called page fault.
+
+Page fault
+
+Virtual page #
+
+Bit
+
+Frame #
+
+7
+
+A
+
+1
+
+0
+
+6
+
+... ...
+
+...
+
+5
+
+D
+
+1
+
+3
+
+4 3
+
+E
+
+0
+
+NIL
+
+2
+
+... ...
+
+...
+
+1
+
+0
+
+MMU
+
+OS kernel
+53
+
+Demand paging ­ illustration.
+
+Assumption: 1 process only.
+
+· The page fault handling routine is running:
+­ The kernel knows the page allocation for all processes. ­ It allocates a memory page for that request. ­ Last, the page table entry for Page E is updated.
+
+Page fault
+
+Virtual page #
+
+Bit
+
+Frame #
+
+A
+
+1
+
+0
+
+... ...
+
+...
+
+D
+
+1
+
+3
+
+E
+
+1
+
+4
+
+... ...
+
+...
+
+MMU
+
+Handling routine
+7 6 5 4 3 2 1 0
+
+allocation
+
+OS kernel
+
+54
+
+Demand paging ­ illustration.
+
+Assumption: 1 process only.
+
+· The routine finishes...and
+· the memset() statement is restarted.
+­ Then, no page fault will be generated until the next unallocated page is encountered.
+
+OS kernel
+
+Virtual page #
+
+Bit
+
+Frame #
+
+7
+
+A
+
+1
+
+0
+
+6
+
+... ...
+
+...
+
+5
+
+D
+
+1
+
+3
+
+4 3
+
+E
+
+1
+
+4
+
+OK
+
+2
+
+... ...
+
+...
+
+1
+
+0
+
+MMU
+
+55
+
+Demand paging ­ illustration.
+
+Assumption: 1 process only.
+
+· So, how about the case when the routine finds that all frames are allocated?
+­ Then, we need the help of the swap area.
+
+Page fault
+
+Virtual page #
+
+Bit
+
+Frame #
+
+A
+
+1
+
+0
+
+... ...
+
+...
+
+H
+
+1
+
+7
+
+I
+
+0
+
+NIL
+
+... ...
+
+...
+
+MMU
+
+Handling routine
+?? ?
+7 6 5 4 3 2 1 0 I'm full!
+
+OS kernel
+Swap area
+56
+
+Demand paging ­ illustration.
+
+Assumption: 1 process only.
+
+· Using the swap area:
+­ Step (1) Select a victim virtual page and copy the victim to the swap area.
+· Now, Frame 0 is a free frame and the bit for Page A is 0.
+
+Page fault
+
+Virtual page #
+
+Bit
+
+Frame #
+
+A
+
+0
+
+0
+
+... ...
+
+...
+
+H
+
+1
+
+7
+
+I
+
+0
+
+NIL
+
+... ...
+
+...
+
+MMU
+
+Handling routine
+7 6 5 4 3 2 1 0
+
+The question is tOoSskeelrencetl which page to swap out?
+
+Copy
+
+PID: 1234 Virtual page: A
+
+Swap area
+
+57
+
+Demand paging ­ illustration.
+
+Assumption: 1 process only.
+
+· Using the swap area:
+­ Step (2) Allocate the free frame to the new frame allocation request.
+· Now, Page I takes Frame 0.
+
+Page fault
+
+Handling routine
+
+Virtual page #
+
+Bit
+
+Frame #
+
+7
+
+A
+
+0
+
+0
+
+6
+
+... ...
+
+...
+
+5
+
+H
+
+1
+
+7
+
+Allocate
+
+4 3
+
+I
+
+1
+
+0
+
+2
+
+... ...
+
+...
+
+1
+
+0
+
+MMU
+
+OS kernel
+PID: 1234 Virtual page: A
+Swap area
+58
+
+Demand paging ­ illustration.
+
+Assumption: 1 process only.
+
+· How about virtual page A is accessed again?
+
+­ Of course, a page fault is generated, and
+
+­ steps similar to the previous case takes place.
+
+Page fault
+
+Handling routine
+
+Swapping out which page really matters
+
+OS kernel
+
+Virtual page #
+
+Bit
+
+Frame #
+
+7
+
+A
+
+0
+
+0
+
+6
+
+... ...
+
+...
+
+5
+
+H
+
+1
+
+7
+
+4 3
+
+I
+
+1
+
+0
+
+2
+
+... ...
+
+...
+
+1
+
+0
+
+MMU
+
+PID: 1234 Virtual page: A
+Swap area
+
+59
+
+OOM generator
+
+· Now, you should understand why this OOM generator run very fast.
+
+#define ONE_MEG 1024 * 1024
+
+The memory page frames are not
+
+int main(void) {
+
+really allocated (demand paging).
+
+void *ptr;
+
+int counter = 0;
+
+It is only for enlarging the virtual
+
+page allocation.
+
+while(1) {
+
+ptr = malloc(ONE_MEG);
+
+if(!ptr)
+
+break;
+
+counter++;
+
+printf("Allocated %d MB\n", counter);
+
+}
+
+return 0; }
+
+60
+
+Real OOM ­ code
+
+#define ONE_MEG 1024 * 1024
+
+Warning #1. Don't run this program on any department's machines.
+
+int main(void) {
+
+void *ptr; int counter = 0;
+
+Warning #2. Don't run this program when you have important tasks running
+
+while(1) {
+
+at the same time.
+
+ptr = malloc(ONE_MEG);
+
+if(!ptr)
+
+break;
+
+memset(ptr, 0, ONE_MEG);
+
+counter++;
+
+printf("Allocated %d MB\n", counter);
+
+}
+
+How does this program "eat"
+
+return 0;
+
+your memory?
+
+}
+What is the consequence after
+
+running this program?
+
+61
+
+Real OOM ­ illustration
+
+Real oom: running
+
+· So, what will happen when the real OOM program is running?
+­ Suppose the OOM program has just started with only one page allocated. (For illustration only!)
+
+OS kernel
+
+Different colors define
+
+7
+
+different processes in the
+
+6 5
+
+system.
+
+4
+
+3
+
+Let the OOM process take
+
+2
+
+the green color.
+
+1 0
+
+Swap area
+62
+
+Real OOM ­ illustration
+
+Real oom: running
+
+· OOM is running...1st stage.
+­ The free memory frames are the first zone that the process has conquered.
+­ All other processes could hardly allocate pages.
+
+OS kernel
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+Swap area
+
+63
+
+Real OOM ­ illustration
+
+Real oom: running
+
+· OOM is running...2nd stage.
+­ Occupied memory frames are the next zone that the process conquers (no unused frames).
+­ Disk activity flies high!
+
+OOM says: "All your frames belong to us."
+
+Page replacement operations will be carried out by the OS.
+
+OS kernel
+
+7
+
+6
+
+... ... ...
+
+5
+
+... ... ...
+
+4
+
+... ...
+
+3
+
+...
+
+2
+
+1
+
+0
+
+Swap area
+
+64
+
+Real OOM ­ illustration
+
+Real oom: running
+
+· OOM is running...3rd stage.
+­ The previously-conquered frames are swapping to the swap area.
+­ Disk activity flies high!
+
+Page replacement operations will be carried out by the OS.
+
+OS kernel
+
+OOM says: "All your
+
+7
+
+frames belong to us."
+
+6 5
+
+4
+
+OOM says: "Resistance is
+
+3
+
+futile. All the swap space
+
+2
+
+will belong to us."
+
+1 0
+
+... ... ... ...
+
+... ... ... ...
+
+...
+
+... ...
+
+...
+
+...
+
+...
+
+...
+
+...
+.S.w. ap area
+
+65
+
+Real OOM ­ illustration
+
+Real oom: running
+
+· OOM is running...Final stage.
+­ The page fault handling routine finds that:
+· No free space left in the swap area! · Decided to kill the OOM process!
+
+SIGKILL
+
+Handling routine
+
+OS kernel
+
+OOM says: "All your
+
+7
+
+frames belong to us."
+
+6 5
+
+4
+
+OOM says: "Resistance is
+
+3
+
+futile. All the swap space
+
+2
+
+will belong to us."
+
+1 0
+
+... ... ... ...
+
+... ... ... ...
+
+... ... ... ...
+
+... ... ... ...
+
+... ... ...
+
+... ... ...
+
+...
+.S.w. ap
+
+a.r.e.a
+...
+
+... ...
+
+... ... ...
+
+66
+
+Real OOM ­ illustration
+
+Real oom: killed
+
+· OOM has died, but... Painful aftermath.
+­ Lots of page faults! Why?
+· It is because other processes need to take back the frames! · Disk activity flies high again, but will go down eventually.
+
+OS kernel
+
+fpafapuafgapluaefgatpluaefgatpluaegatluegtlet
+
+7 6 5 4
+
+... ... ... ... ... ...
+... ...
+
+3
+
+...
+
+2
+
+1
+
+0
+
+Swap area
+
+67
+
+Demand paging - Issues
+· Swap area
+­ Where is it? ­ How large is it?
+· Can we run a really large process (e.g., bigger than physical memory)?
+­ How large is it at most?
+· How about fork() and exec*()?
+­ Can they be clever?
+68
+
+Swap area ­ location
+· The swap area is usually a space reserved in a permanent storage device.
+
+Linux needs a separate partition and it is called the swap partition.
+
+$ sudo fdisk /dev/sda ...... Command (m for help): p ...... /dev/sda1 ...... Linux /dev/sda2 ...... Linux swap / Solaris Command (m for help): _
+
+Windows hides a file "pagefile.sys", which is the swap area, in one of the drives.
+
+69
+
+Swap area - size
+· How large should the swap space be?
+­ It should be at least the same as the size of the physical memory, so that ...
+· when a really large process wants to take all the memory... · all the pages on the physical memory can find a place to hide.
+­ An old rule said that "swap should be twice the size of the physical memory".
+· But, I can't find the reasons anymore, and this rule does not hold nowadays because we now have too much RAM!
+70
+
+How about running large programs
+· When a process is larger than the physical memory, is it able to run?
+­ No need to load all data in memory...Demand paging
+· Generates page fault to allocate physical page frames · Trigger page replacement if there is no unused frames
+· How large is a process that a system can support
+Max. process size = Physical memory size +
+Available space in the swap partition (file) -
+Kernel memory size
+71
+
+How about fork() & exec()
+· What we have learned about the fork() system call is...duplication!
+­ The parent process and the child process are identical from the userspace memory point of view.
+
+Child
+Stack Unallocated
+Heap BSS Data Code
+
+Parent
+
+Stack
+
+fork()
+
+Unallocated Heap
+
+BSS Data Code
+
+72
+
+How about fork() & exec()
+· What does duplication mean? Allocate new pages for the child process?
+­ If yes...then consider exec*() system call as well... ­ Isn't it stupid?
+
+Child
+
+Child
+
+Stack
+
+Stack
+
+Unallocated Heap
+
+Exec*()
+
+Unallocated Heap
+
+BSS Data Code
+
+BSS Data Code
+
+Parent
+
+Stack
+
+fork()
+
+Unallocated Heap
+
+BSS Data Code
+
+73
+
+How about fork() & exec()
+· Can we have a clever design with demand paging?
+­ A technique called copy-on-write is implemented
+Copy-on-write technique allows the parent and the child processes to share pages after the fork() system call is invoked.
+A new, separated page will be copied and modified only when one of the processes wants to write on a shared page.
+74
+
+Copy-on-Write (COW)
+· Before fork() ...
+75
+
+Copy-on-Write (COW)
+· Right after fork() in invoked ...
+76
+
+Copy-on-Write (COW)
+· When both processes read the pages...
+77
+
+Copy-on-Write (COW)
+· When one of the processes write to a shared page...
+78
+
+Demand paging - performance
+· Demand paging can significantly affect performance
+­ Service the page fault interrupt ­ Read in the page ­ Restart the instruction/process
+· How to characterize?
+­ Effective access time ­ 1 -  ×  +  ×   
+· : memory access time (10-200ns) · : prob. of a page fault ·   : ms
+79
+
+Example
+· : 200ns,   : 8ms
+· 1/1000 page fault probability
+­ Effective access time: 1 -  200 +  × 8ms = 8.2
+· To allow 10% performance degradation only
+­ 1 -  200 +  × 8ms < 220ns ­  < 0.0000025
+· Thus, page fault rate must be low
+80
+
+Summary of demand paging
+· Demand paging enables over-commitment
+­ Large process can be supported ­ Concurrent running of multiple processes is also
+supported
+· One key issue is...
+­ How to select victim pages to swap out? ­ Page-replacement algorithm
+81
+
+Memory Management - Virtual memory; - MMU implementation & paging; - Demand paging; - Page replacement algorithms; - Allocation of frames;
+82
+
+Page replacement ­ introduction
+· Remember the page replacement operation?
+­ It is the job of the kernel to find a victim page in the physical memory, and...
+­ write the victim page to the swap space.
+
+Page fault
+MMU
+
+Handling routine
+7 6 5 4 3 2 1 0
+
+Page replacement
+
+Copy
+
+PID: 1234 Virtual page: 0
+
+Swap area
+
+83
+
+Page replacement ­ introduction
+· Replacing a page involves disk accesses, therefore a page fault is slow and expensive!
+­ Key issue: which page should be swapped out? ­ Page replacement algorithms should minimize further
+page faults.
+· In the following, we introduce four algorithms:
+­ Optimal; ­ First-in first-out (FIFO); ­ Least recently used (LRU); ­ Second-chance algorithm
+84
+
+Page replacement ­ algorithm
+· Imagine that you are the kernel...
+­ you have a process just started to run; ­ the process' memory is larger than the physical memory; ­ assume that all the pages are in the swap space.
+
+These numbers are the order of the virtual page numbers that the process will access to.
+
+These blocks are the page frames. The numbers mean the virtual page numbers that are on the memory frames.
+5
+
+Process
+
+2
+
+2, 1, 9, 3, 5, 6, 4, ...
+
+8
+
+page reference string
+Note: this is not the scenario that the process is just started.
+
+4
+
+7
+
+Memory frames
+
+85
+
+Page replacement ­ algorithm
+· Imagine that you are the kernel...
+­ you have a process just started to run; ­ the process' memory is larger than the physical memory; ­ assume that all the pages are in the swap space.
+
+The memory pages that are not in the memory.
+
+VPirtoucael spsage
+access order.
+
+2, 1, 9, 3, 5, 6, 4, ... 1st 2nd 3rd ...
+
+Note: this is not the scenario that the process is just started.
+
+5
+
+2
+
+8
+
+4
+
+7
+
+Memory frames
+
+86
+
+Page replacement ­ when an algorithm starts
+· Initial condition
+­ Let all the frames be empty.
+70120304230321 -
+Number of page faults 0
+87
+
+Page replacement ­ optimal algorithm
+· What is the best algorithm?
+­ Do not worry about the implementation at this moment.
+70120304230321 -
+Number of page faults 0
+88
+
+Page replacement ­ optimal algorithm
+· If I know the future, then I know how to do better.
+­ That means I can optimize the result if the page reference string is given in advance.
+­ That's why the algorithm is called "optimal".
+
+70120304230321
+
+-
+
+-
+
+readahead
+
+-
+
+Number of page faults 0
+
+89
+
+Page replacement ­ optimal algorithm
+· If I know the future, then I know how to do better.
+­ The first page request will cause a page fault.
+· Because there are free frames, no replacement is needed.
+
+70120304230321
+
+7- 7 7 -00 --1
+
+readahead
+
+Number of page faults 3
+
+90
+
+Page replacement ­ optimal algorithm
+· Replace strategy:
+­ To replace the page that will not be used for the longest period of time.
+
+70120304230321
+
+7- 7 7 reuse = infinity - 0 0 reuse = 2 access later - - 1 reuse = 11 access later
+
+We should replace this frame.
+
+Number of page faults 3
+
+91
+
+Page replacement ­ optimal algorithm
+· The story goes on...
+­ But, do you think that this is a non-sense? ­ Of course, this is to give you a sense that how close an
+algorithm is from the optimal.
+70120304230321 -7 7 7 2 2 2 2 2 2 2 2 2 2 1 -0000004440000 --111333333333
+Number of page faults 86754
+92
+
+Page replacement ­ Problem of the optimal algorithm
+· Unfortunately, you never know the future...
+­ It is not practical to implement such an algorithm ­ Is there any easy-to-implement algorithm?
+· You have already learnt process scheduling
+· FIFO: the first page being swapped into the frames will be the first page being swapped out.
+­ The victim page will always be the oldest page. ­ The age of a page is counted by the time period that it is
+stored in the memory.
+93
+
+Page replacement ­ FIFO algorithm
+· When there is no free frames,
+­ The FIFO page replacement algorithm will choose the oldest page to be the victim.
+
+70120304230321
+
+-7 7 7 -00 --1
+oldest
+
+Number of page faults 3
+
+94
+
+Page replacement ­ FIFO algorithm
+· When there is no free frames,
+­ The FIFO page replacement algorithm will choose the oldest page to be the victim.
+­ Of course, the oldest page changes.
+70120304230321 -7 7 7 2 -000 --11
+
+oldest
+
+Number of page faults 4
+
+95
+
+Page replacement ­ FIFO algorithm
+· When a memory reference can be found in the memory, will the age of that frame be changed?
+­ NO! The frame storing "page 0" is still the oldest frame.
+
+70120304230321
+
+7- 7 7 2 2 -0000 --111
+
+Remember, no page fault in this time.
+
+oldest
+
+Number of page faults 4
+
+96
+
+Page replacement ­ FIFO algorithm
+· The story goes on...
+­ Seems that there is no intelligence in this method... ­ Pages which will be accessed again are swapped out
+70120304230321 -7 7 7 2 2 2 2 4 4 4 0 0 0 0 -0000333222221 --111100033333
+Number of page faults 151 Number of page faults in the optimal algorithm 8
+97
+
+Page replacement ­ LRU algorithm
+· Can we do better?
+­ Still remember the locality rule?
+· Recently accessed pages may be accessed again in near future
+­ Why not swap out the pages which are not accessed recently
+· This is the least-recently-used (LRU) page replacement.
+98
+
+Page replacement ­ LRU algorithm
+· Strategy:
+­ Attach every frame with an age, which is an integer. ­ When a page is just accessed,
+· no matter that page is originally on a frame or not, set its age to be 0. · Other frames' ages are incremented by 1.
+
+70120304230321
+
+7- 7 7 age = 2 - 0 0 age = 1 - - 1 age = 0
+
+We should replace this frame.
+To replace the page that is least-recently used
+
+look back
+
+Number of page faults 3
+
+99
+
+Page replacement ­ LRU algorithm
+· Strategy:
+­ Attach every frame with an age, which is an integer. ­ When a page is just accessed,
+· no matter that page is originally on a frame or not, set its age to be 0. · Other frames' ages are incremented by 1.
+70120304230321 -7 7 7 2 age = 0 - 0 0 0 age = 2 - - 1 1 age = 1
+Number of page faults 4
+100
+
+Page replacement ­ LRU algorithm
+· Strategy:
+­ Attach every frame with an age, which is an integer. ­ When a page is just accessed,
+· no matter that page is originally on a frame or not, set its age to be 0. · Other frames' ages are incremented by 1.
+
+70120304230321
+
+-7 7 7 2 2 age = 1 - 0 0 0 0 age = 0 - - 1 1 1 age = 2
+
+The age of this frame becomes 0.
+
+Number of page faults 4
+
+101
+
+Page replacement ­ LRU algorithm
+· Strategy:
+­ Attach every frame with an age, which is an integer. ­ When a page is just accessed,
+· no matter that page is originally on a frame or not, set its age to be 0. · Other frames' ages are incremented by 1.
+
+70120304230321 7- 7 7 2 2 2 2 4 4 4 0 0 0 1 -0000000033333 --111333222222
+
+Number of page faults in the FIFO algorithm 11 Number of page faults in the optimal algorithm 8
+
+Number of page faults 10
+
+102
+
+Page replacement ­ LRU algorithm
+· The performance of LRU is considered to be good, but how to implement the LRU algorithm efficiently
+­ Counters: requires to update counter and search the table to find the page to evict
+­ Stack: implement with doubly linked list (pointer update)
+· Common case in many systems
+­ A reference bit for each page (set by hardware) ­ LRU approximation: Second-chance algorithm
+103
+
+Page replacement ­ LRU approximation
+· Second-chance algorithm
+­ Basic: FIFO ­ Give the page a second chance if its reference bit is on
+
+OUT!
+
+B
+R:0
+Oldest
+
+A
+R:1
+Oldest
+
+C
+
+D
+
+A
+
+NULL
+
+R:0
+
+R:1
+
+R:0
+
+2nd Chance!
+
+If a page is heavily used, its reference bit will be very likely to be on.
+
+B
+
+C
+
+D
+
+R:0
+
+R:0
+
+R:1
+
+NULL
+
+104
+
+Page replacement ­ LRU approximation
+· Clock is the efficient implementation of the 2nd chance algorithm (circular queue).
+
+OUT!
+
+R:1
+
+R:0
+
+A
+
+R:0
+
+H
+
+B
+
+R:0
+
+R:0
+
+G
+
+C
+
+R:0
+
+R:0
+
+F
+
+R:1
+
+D
+
+E
+
+105
+
+Page replacement ­ LRU approximation
+· Clock is the efficient implementation of the 2nd chance algorithm (circular queue).
+
+R:0
+
+R:0
+
+A
+
+R:0
+
+out
+
+H
+
+B
+
+R:0
+
+R:0
+
+G
+
+C
+
+R:0
+
+R:0
+
+F
+
+R:1
+
+D
+
+E
+
+What if all reference bits are set?
+Degenerates to FIFO
+
+106
+
+Page replacement ­ performance
+· Number of page frames VS Performance.
+­ Increasing the number of page frames implies increasing the amount of the physical memory.
+· So, it is natural to think that:
+­ I have more memory...and more frames... ­ Then, my system must be faster than before! ­ Therefore, the number of page faults must be fewer
+than before, given the same page reference string.
+107
+
+Page replacement ­ performance
+· Your expectation:
+108
+
+Page replacement ­ performance
+· The reality may be:
+This is called Belady's anomaly
+109
+
+Page replacement ­ performance
+· Try the following:
+­ all page frames are initially empty; ­ use FIFO page replacement algorithm; ­ use the number of frames: 3, 4, and 5. ­ The page reference string is:
+1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5
+110
+
+Page replacement ­ performance
+· Belady's anomaly exists for some algorithms
+­ Both optimal and LRU do not suffer from it
+· Stack algorithms: never exhibit Belady's anomaly
+­ Feature: The set of pages in memory for  frames is always a subset of the set of pages in memory for  + 1 frames
+­ Example: LRU
+· The  most recently referenced pages will still be the most recently referenced pages when the number of frames increases
+111
+
+Memory Management - Virtual memory; - MMU implementation & paging; - Demand paging; - Page replacement algorithms; - Allocation of frames;
+112
+
+Allocation for user processes
+· Free-frame list
+­ Demand paging and page replacement
+· Constrains
+­ Limit on number of frames
+· Upper bound: total available frames · Lower bound: has a minimum number
+­ Performance consideration (limit page-fault rate) ­ Defined by computer architecture (instructions) ­ Process will be suspended if the number of allocated frames falls
+below the minimum requirement
+113
+
+Allocation algorithm
+
+· Global / local allocation (replacement)
+
+· Equal allocation
+
+­  frames among  processes
+
+·
+
+ 
+
+frames
+
+for
+
+each
+
+process
+
+­ Memory waste
+
+· Proportional allocation
+
+­ Size of process p is , then allocate
+
+­
+
+
+
+=
+
+ 
+
+×
+
+
+
+· Priority-based scheme
+
+­ Ratio depends on both process size and priority
+
+114
+
+Issues - Thrashing
+· If a process does not have enough frames ­ number of frames required to support pages in active use
+­ Frequent page fault
+· Replace a page that will be needed again right away
+­ This is called thrashing
+· Spend more time paging than executing
+115
+
+Issues - Thrashing
+· Example: Multiprogramming + global page replacement
+­ Increase CPU utilization (increase degree of multiprogramming) ­ Frequent page fault (queue up for paging, reduce CPU utilization,
+increase degree of multiprogramming)
+116
+
+Issues - Thrashing
+· How to address?
+­ Local replacement/priority replacement
+· Will not cause other processes to thrash · Still not fully solve this problem
+­ Increase average time for a page fault ­ longer queue for the paging device ­ longer effective access time even for non-thrashing processes
+117
+
+Issues - Thrashing
+· How to address?
+­ Provide as many frames as needed
+· Use working-set strategy to estimate needed frames
+­ Working set: the set of pages in the recent  page references
+ > m: thrashing may occur
+118
+
+Issues - Thrashing
+· How to address?
+­ Provide as many frames as needed
+· Use working-set strategy to estimate needed frames
+­ Working set: the set of pages in the recent  page references
+· Use page-fault frequency
+119
+
+Allocation for kernel memory
+· Kernel memory allocation requirement
+­ Features
+· Varying (small) size requirement: different data structures · Contiguous requirement (certain hardware devices interact
+with physical memory)
+­ Paging: Internal fragmentation
+· Buddy system + Slab allocation
+120
+
+Buddy system
+· Allocate memory from a fixed-size segment
+­ Power-of-2 allocator (11 orders) ­ Advantage: coalescing
+121
+
+Slab allocation
+· Allocate memory for small objects (limit fragmentation)
+­ Slab: one/more contiguous pages ­ Cache: one/more slabs
+· A separate cache for each unique kernel data structure
+Reduce fragmentation
+Fast allocation (caching benefit)
+Further reading: SLOB/SLUB
+122
+
+Memory mapped file
+· Ordinary file access
+­ open(), read(), write() ­ System call + disk access
+· Memory mapped file
+­ Memory mapping a file: associate a part of the virtual address space with the file
+­ File access
+· Initial access to file: demand paging · Subsequent reads/writes: routine memory accesses · Improves performance
+­ Refer to mmap(2) system call
+123
+
+Memory mapped file
+· Also allow multiple processes to map the same file
+124
+
+Summary
+· We have introduced...
+­ Segmentation ­ Paging + page table ­ Demand paging + COW + page replacement algorithms ­ Allocation of frames
+· User process · Thrashing · Kernel memory (buddy + slab)
+­ Memory-mapped file
+· More...
+­ malloc() is not that simple: refer to "glibc malloc" ­ Other page-replacement algorithms
+125
+
+

@@ -1,0 +1,1136 @@
+Operating Systems
+
+Prof. Yongkun Li
+- 
+http://staff.ustc.edu.cn/~ykli
+
+                                                   Ch5
+                          Process Communication
+
+                                                                                                                                                                          1
+Story so far...
+
+· Process concept + operations
+
+   ­ Programmer's perspective + kernel's perspective
+
+· Thread
+
+   ­ Lightweight process
+
+· We mainly talked about the stuffs related to a single
+  process/thread
+
+   ­ What if multiple processes/threads exist...
+
+                                                                                                                                                                               2
+Processes
+
+· The processes within a system may be
+
+   ­ independent or
+
+         · Independent process cannot affect or be affected by other
+           processes
+
+   ­ cooperating
+
+         · Cooperating process can affect or be affected by other
+           processes
+
+· Note: Any process that shares data with others is a
+  cooperating process
+
+                                                                                                                                                                               3
+Cooperating Processes
+
+· Why we need cooperating processes
+
+   ­ Information sharing
+
+         · e.g., shared file
+
+   ­ Computation speedup
+
+         · executing subtasks in parallel
+
+   ­ Modularity
+
+         · dividing system functions into separate processes
+
+   ­ Convenience
+
+         · single user can have multiple processes to execute many tasks
+
+                                                                                                                                                                               4
+Inter-process communication (IPC)
+   - What and how?
+
+                                                                                                              P
+                                                                                               P
+
+                                                                                                              P
+
+                                                                                                                                                                             5
+Interprocess Communication
+
+· IPC: used for exchanging data between processes
+
+   ­ Cooperating processes need
+
+         · interprocess communication (IPC) for exchanging data
+
+· How to illustrate?
+
+   ­ Paradigm for cooperating processes
+   ­ Producer-consumer problem, useful metaphor for many
+
+      applications (abstracted problem model)
+
+         · producer process produces information that is consumed by a
+           consumer process
+
+         · At least one producer and one consumer
+
+                                                                                                                                                                               6
+Two models
+
+· Two (abstracted) models of IPC
+
+   ­ Shared memory
+
+         · Establish a shared memory region, read/write to shared region
+         · Accesses are treated as routine memory accesses
+         · Faster
+
+                                                                                                                                                                               7
+Two models
+
+· Two (abstracted) models of IPC
+
+   ­ Message passing
+
+         · Exchange message
+         · Require kernel intervention
+         · Easier to implement in distributed system
+
+                                                                                                                                                                               8
+Shared Memory
+
+· Producer-consumer problem
+
+    ­ A buffer is needed to allow processes to run concurrently
+
+Producer enqueue  dequeue Consumer
+
+          bounded/unbounded buffer
+
+A buffer  -It is a shared object;
+          -It is a queue (imagine that it is an array implementation of queue).
+
+A producer -It produces a unit of data, and
+  process -writes that a piece of data to the tail of the buffer at one time.
+
+A consumer -It removes a unit of data from the head of the bounded buffer at
+  process one time.
+
+                                                                                 9
+Shared Memory
+
+· Focus on bounded buffer: what are the requirements?
+
+   Producer-    When the producer wants to
+   consumer     (a) put a new item in the buffer, but
+requirement #1  (b) the buffer is already full...
+
+                Then,
+                (1) The producer should be suspended, and
+                (2) The consumer should wake the producer up after she has
+
+                    dequeued an item.
+
+   Producer-    When the consumer wants to
+   consumer     (a) consumes an item from the buffer, but
+requirement #2  (b) the buffer is empty...
+
+                Then,
+                (1) The consumer should be suspended, and
+                (2) The producer should wake the consumer up after she has
+
+                    enqueued an item.
+
+                                                                            10
+Shared Memory
+
+   #define BUFFER_SIZE 10     item next_produced;
+   typedef struct {
+                              while (true) {
+      ...
+   } item;                       /* produce an item in next produced */
+   item buffer[BUFFER_SIZE];
+   int in = 0;                   while (((in + 1) % BUFFER_SIZE) == out)
+   int out = 0;
+                                              ; /* do nothing */
+Shared memory by producer
+& consumer processes             buffer[in] = next_produced;
+
+                  ...            in = (in + 1) % BUFFER_SIZE;
+
+out (consumer) in (producer)  }                                    Producer
+
+Only allows BUFFER_SIZE-1     item next_consumed;                  Consumer
+items at the same time. Why?
+                              while (true) {
+                                           while (in == out)
+
+                                              ; /* do nothing */
+                                 next_consumed = buffer[out];
+
+                                 out = (out + 1) % BUFFER_SIZE;
+
+                                           /* consume the item */
+                              }
+
+                                                                             11
+Message Passing
+
+· Communicating processes may reside on different
+  computers connected by a network
+
+· IPC facility provides two operations:
+
+   ­ send(message) + receive(message)
+
+· If processes P and Q wish to communicate
+
+   ­ Establish a communication link between them
+   ­ Exchange messages via send/receive
+
+P
+
+                     Message
+
+passing                                           Q
+
+                                                     12
+Message Passing (Cont.)
+
+· Implementation issues (logical):
+
+   ­ Naming: Direct/indirect communication
+   ­ Synchronization: Synchronous/asynchronous
+   ­ Buffering
+
+                                                                                                                                                                             13
+Naming
+
+· How to refer to each other?
+· Direct communication: explicitly name each other
+
+   ­ Operations (symmetry)
+
+         · send (Q, message) ­ send a message to process Q
+         · receive(P, message) ­ receive a message from process P
+
+   ­ Properties of communication link
+
+         · Links are established automatically (every pair can establish)
+         · A link is associated with exactly one pair of processes
+         · Between each pair, there exists exactly one link
+
+   ­ Disadvantage: limited modularity (hard-coding)
+
+                                                                                                                                                                             14
+Naming
+
+· How to refer to each other?
+· Indirect communication: sent to and received from
+
+  mailboxes (ports)
+
+   ­ Operations
+
+         · send (A, message) ­ send a message to mailbox A
+         · receive(A, message) ­ receive a message from mailbox A
+
+   ­ Properties of communication link
+
+         · A link is established between a pair of processes only if both
+           members have a shared mailbox
+
+         · A link may be associated with more than two processes
+         · Between each pair, a number of different links may exist
+
+                                                                                                                                                                             15
+Issues of Indirect Communication
+
+· ISSUE1: Who receives the message when multiple
+  processes are associated with one link?
+
+­ Who gets the message?  P1           P2
+
+                             Mailbox
+
+                                      P3
+
+­ Policies
+
+· Allow a link to be associated with at most two processes
+· Allow only one process at a time to execute a receive operation
+
+· Allow the system to select arbitrarily the receiver (based on an algorithm).
+  Sender is notified who the receiver was.
+
+· ISSUE2: Who owns the mailbox?
+
+    ­ The process (ownership may be passed)
+    ­ The OS (need a method to create, send/receive, delete)
+
+                                                                   16
+Synchronization
+
+· How to implement send/receive?
+
+   ­ Blocking is considered synchronous
+
+          · Blocking send - the sender is blocked until the msg is received
+          · Blocking receive - the receiver is blocked until a msg is available
+
+   ­ Non-blocking is considered asynchronous
+
+          · Non-blocking send - the sender sends the message and resumes
+          · Non-blocking receive - the receiver receives a valid msg or null
+
+· Different combinations are possible
+
+   ­ When both send and receive are blocking, we have a
+      rendezvous between the processes.
+
+   ­ Other combinations need buffering.
+
+                                                                                                                                                                             17
+Buffering
+
+· Different combinations are possible
+
+    ­ When both send and receive are blocking, we have a rendezvous
+       between the processes.
+
+    ­ Other combinations need buffering.
+
+· Messages reside in a temporary queue, which can be
+  implemented in three ways
+
+    ­ Zero capacity ­ no messages are queued on a link,
+       sender must wait for receiver (no buffering)
+
+    ­ Bounded capacity ­ finite length of n messages,
+       sender must wait if link is full
+
+    ­ Unbounded capacity ­ infinite length, sender never waits
+
+                                                                                                                                                                             18
+Inter-process communication (IPC)
+   - What and how?
+   - POSIX shared memory
+
+                                                                                                              P
+                                                                                               P
+
+                                                                                                              P
+
+                                                                                                                                                                            19
+POSIX Shared Memory
+
+· POSIX shared memory is organized using memory-
+  mapped file
+
+   ­ Associate the region of shared memory with a file
+
+· Illustrate with the producer-consumer problem
+
+   ­ Producer
+   ­ Consumer
+
+                                                                                                                                                                             20
+POSIX Shared Memory
+
+· Producer
+
+   ­ Create a shared-memory object
+
+          · shm_fd = shm_open(name, O_CREAT | O_RDWR, 0666);
+
+             Name of the shared memory object
+                                Create the object if it does not exist
+                                                   Open for reading & writing
+                                                                          Directory permissions
+
+                                                                                                                                                                             21
+POSIX Shared Memory
+
+· Producer
+
+   ­ Create a shared-memory object
+
+          · shm_fd = shm_open(name, O_CREAT | O_RDWR, 0666);
+
+   ­ Configure object size
+
+          · ftruncate(shm_fd, SIZE);
+
+ File descriptor for the shared mem. Obj.
+              Size of the shared-memory object
+
+                                                                                                                                                                             22
+POSIX Shared Memory
+
+· Producer
+
+   ­ Create a shared-memory object
+
+          · shm_fd = shm_open(name, O_CREAT | O_RDWR, 0666);
+
+   ­ Configure object size
+
+          · ftruncate(shm_fd, SIZE);
+
+   ­ Establish a memory-mapped file containing the object
+
+          · ptr = mmap(0,SIZE, PROT_WRITE,MAP_SHARED,shm_fd,0);
+
+                       Allows writing to the object
+                       (only writing is necessary for producer)
+
+                                        Changes to the shared-memory object will
+                                        be visible to all processes sharing the object
+
+                                                                                                                                                                             23
+POSIX Shared Memory
+
+· Consumer
+
+   ­ Open the shared-memory object
+
+          · shm_fd = shm_open(name, O_RDONLY, 0666);
+
+                                                       Open for read only
+
+                                                                                                                                                                             24
+POSIX Shared Memory
+
+· Consumer
+
+   ­ Open the shared-memory object
+
+          · shm_fd = shm_open(name, O_RDONLY, 0666);
+
+   ­ Memory map the object
+
+          · ptr = mmap(0,SIZE, PROT_READ,MAP_SHARED,shm_fd,0);
+
+                 Allows reading to the object
+                 (only reading is necessary for consumer)
+
+                                                                                                                                                                             25
+POSIX Shared Memory
+
+· Consumer
+
+   ­ Open the shared-memory object
+
+          · shm_fd = shm_open(name, O_RDONLY, 0666);
+
+   ­ Memory map the object
+
+          · ptr = mmap(0,SIZE, PROT_READ,MAP_SHARED,shm_fd,0);
+
+   ­ Remove the shared memory object
+
+         · shm_unlink(name);
+
+                                                                                                                                                                             26
+POSIX Shared Memory ­ Complete Solution
+
+Producer  Consumer
+
+          Direct access to the shared memory region
+
+                                                                                                                    27
+Inter-process communication (IPC)
+   - What and how?
+   - POSIX shared memory
+   - Sockets
+
+                                                                                                              P
+                                                                                               P
+
+                                                                                                              P
+
+                                                                                                                                                                            28
+Sockets
+
+· A socket is defined as an endpoint for
+  communication (over a network)
+
+   ­ A pair of processes employ a pair of sockets
+   ­ A socket is identified by an IP address and a port
+
+      number
+   ­ All ports below 1024 are used for standard services
+
+         · telnet server listens to port 23
+         · FTP server listens to port 21
+         · HTTP server listens to port 80
+
+                                                                                                                                                                             29
+Sockets
+
+· Socket uses a client-server architecture
+
+    Server waits for incoming client
+      requests by listening to a specific port
+
+    Accepts a connection from the client
+      socket to complete the connection
+
+· All connections must be unique
+
+    ­ Establishing a new connection on the same host needs another
+       port (>1024)
+
+· Special IP address 127.0.0.1 (loopback) refers to itself
+
+    ­ Allow a client and server on the same host to communicate using
+       the TCP/IP protocol
+
+                                                                                                                                                                             30
+Example in Java
+
+· Three types of sockets
+
+    ­ Connection-oriented (TCP), Connectionless (UDP), Multicast ­
+       data can be sent to multiple recipients
+
+                                                                                                                                                                             31
+Inter-process communication (IPC)
+   - What and how?
+   - POSIX shared memory
+   - Sockets
+   - Pipes
+
+                                                                                                              P
+
+                                                                                               P
+
+                                                                                                              P
+
+                                                                                                                                                                            32
+What is pipe?
+
+· Pipe is a shared object.
+
+   ­ Using pipe is a way to realize IPC.
+   ­ Acts as a conduit allowing two processes to
+
+      communicate.
+
+                                                             ls | less
+
+ls  data  less
+
+    pipe
+             An IPC Example
+
+                                                                        33
+Pipes
+
+· Four issues:
+
+   ­ Is the communication unidirectional or bidirectional?
+   ­ In the case of two-way communication, is it half or full-
+
+      duplex?
+   ­ Must there exist a relationship (i.e., parent-child)
+
+      between the communicating processes?
+   ­ Can the pipes be used over a network?
+
+· Two common pipes
+
+   ­ Ordinary pipes and named pipes
+
+                                                                                                                                                                             34
+Ordinary Pipes
+
+· Ordinary pipes (no name in file system)
+
+   ­ Ordinary pipes are used only for related processes
+      (parent-child relationship)
+
+         · Processes must reside on the same machine
+
+   ­ Ordinary pipes are unidirectional (one-way
+      communication)
+
+   ­ Ceases to exist after communication has finished
+
+· Ordinary pipes allow communication in standard
+  producer-consumer style
+
+   ­ Producer writes to one end (write-end)
+   ­ Consumer reads from the other end (read-end)
+
+                                                                                                                                                                             35
+UNIX Pipe
+
+· UNIX treats a pipe as a special file (child inherits it
+  from parent)
+
+   ­ Create: pipe(int fd[]);
+
+         · fd[0]: read end
+         · fd[1]: write end
+
+   ­ Access: Ordinary read() and write() system calls
+
+                                                ls | less
+
+ls               Byte stream             less
+               Unidirectional
+
+    Write end  pipe            Read end
+       fd[1]                     fd[0]
+
+                                               36
+UNIX Pipe
+
+· Pipes are anonymous (no name in file system), then
+  how to share?
+
+   ­ fork() duplicates parent's file descriptors
+   ­ Parent and child use each end of the pipe
+
+                                                      Sharing
+
+                                                                                                                                                                             37
+UNIX Pipe
+
+           Create a child process
+
+                          Parent process
+                          Use the write end only
+
+                                 unidirectional (one-
+                                 way communication
+                          Child process
+                          Use the read end only
+
+                                                                                                   38
+Pipe - Shell Example            Programmer's point of view.
+
+            ls | less
+
+ls       write();      pipe     read();  less
+
+                       pipe();  fork();
+
+fork();                Shell
+
+                                                             39
+Pipe ­ Shell Example
+
+ls | less                      Kernel's point of view.
+     ls
+           Shell               The pipe() system call
+                               creates a piece of shared
+write();   pipe();     less    storage in the kernel
+                               space!
+                      read();
+                               Yet, the pipe is more than
+                               a storage: it is a FIFO
+                               queue with finite space.
+
+enqueue               dequeue
+
+                                                        40
+Pipe ­ Shell Example
+
+                      The producer-consumer model
+
+Producer    More, this kind of application      Consumer
+     ls     demonstrates the producer-consumer     less
+            communication model.
+  write();                                        read();
+            Remember the two requirements of
+            the bounded buffer?
+
+enqueue                                         dequeue
+
+                                                           41
+Named Pipes
+
+· Named pipes (pipe with name in file system)
+
+    ­ No parent-child relationship is necessary (processes must reside
+       on the same machine)
+
+    ­ Several processes can use the named pipe for communication
+       (may have several writers)
+
+    ­ Continue to exist until it is explicitly deleted
+    ­ Communication is bidirectional (still half-duplex)
+
+· Named pipes are referred to as FIFOs in UNIX
+
+   ­ Treated as typical files
+
+    ­ mkfifo(), open(), read(), write(), close()
+
+                                                                                                                                                                             42
+Story so far...
+
+· Interprocess communication (IPC)
+
+    ­ Necessary for cooperating processes
+    ­ Producer-consumer model
+
+· IPC models
+
+    ­ Shared memory & message passing
+
+· IPC schemes
+
+    ­ Shared memory
+    ­ Ordinary pipes (parent-child processes)
+    ­ FIFOs (processes on the same machine)
+    ­ Sockets (intermachine communication)
+
+· More: Michael Kerrisk, "The Linux Programming Interface"
+   (http://www.man7.org/tlpi/)
+
+                                                                                                                                                                             43
+IPC models ­ another point of view
+
+    Shared Objects                           Message Passing
+
+P1                                       P1  Message
+
+    read &          Shared                   passing          P2
+    write           object
+
+P2
+
+Challenge. Coordination can only be       Challenge. Coordination relies on the
+done by detecting the status of the         reliability and the efficiency of the
+
+             shared object.              communication medium (and protocol).
+    E.g., is the pipe empty / full?
+
+E.g., pipes, shared memory, and regular  E.g., socket programming, message
+                     files.                passing interface (MPI) library.
+
+                                                                                   44
+Inter-process communication (IPC)
+   - What and how?
+   - POSIX shared memory
+   - Sockets
+   - Pipes
+
+IPC problem: Race condition        P
+
+                             P
+
+                                   P
+
+                                      45
+Evil source: the shared objects
+
+                                                   data
+
+· Pipe is implemented with the     Process                    Process
+  thought that there may be
+  more than one process                   read()              write()
+  accessing it "at the same time"
+
+· For shared memory and files,     File structure
+  concurrent access may yield      in the kernel
+  unpredictable outcomes
+
+                                                   Hard Disk
+
+                                                                       46
+Understanding the problem...
+
+High-level language for Program A  The Scenario
+
+ 1 attach to the shared memory X;                      Shared memory
+ 2 add 10 to X;
+ 3 exit;                                                     Value = 10
+
+High-level language for Program B    add 10;  minus 10;
+
+ 1 attach to the shared memory X;  Process A     Process B
+ 2 minus 10 to X;
+ 3 exit;
+
+Guess what the final result should be? It may be 10, 0 or 20, can you believe it?
+
+                                                                                                                                                                 47
+Understanding the problem...
+
+High-level language for Program A  The Scenario
+
+ 1 attach to the shared memory X;                      Shared memory
+ 2 add 10 to X;
+ 3 exit;                                                     Value = 10
+
+High-level language for Program B    add 10;  minus 10;
+
+ 1 attach to the shared memory X;  Process A     Process B
+ 2 minus 10 to X;
+ 3 exit;
+
+Remember the flow of executing a program and the system hierarchy?
+
+                                                                                                                                                                        48
+Understanding the problem...
+
+High-level language for Program A         The Scenario
+
+1 attach to the shared memory X;                              Shared memory
+
+2 add 10 to X;  This operation                                      Value = 10
+3 exit;         is not atomic
+
+Partial low-level language for Program A    add 10;  minus 10;
+
+ 1 attach to the shared memory X;         Process A     Process B
+ ......
+ 2.1 load memory X to register A;         Guess what? This code block is evil!
+ 2.2 add 10 to register A;
+ 2.3 write register A to memory X;
+ ......
+ 3 exit;
+
+                                                                                49
+Understanding the problem...
+
+                           Shared memory - X
+
+                                Value = 10
+
+State:  Register A                            Register A  State:
+Ready   Value = 0                             Value = 0   Ready
+
+2.1 load memory X to       2.1 load memory X to
+         register A;               register A;
+
+2.2 add 10 to register A;  2.2 minus 10 from register A;
+2.3 write register A to    2.3 write register A to
+
+         memory X;                 memory X;
+
+Process A                                                   Process B
+
+                           The initial setting
+
+                                                                                                                                50
+Execution Flow #1
+
+                                                                                                                     51
+Problem not yet arise...
+
+                                 Shared memory - X
+
+                                      Value = 10
+
+ State:  Register A                                 Register A  State:
+Running  Value = 10                                 Value = 0   Ready
+
+1 2.1 load memory X to           2.1 load memory X to
+                                         register A;
+               register A;
+      2.2 add 10 to register A;  2.2 minus 10 from register A;
+      2.3 write register A to    2.3 write register A to
+
+               memory X;                 memory X;
+
+     Process A                                                    Process B
+
+                     Execution Flow #1, Step 1
+
+                                                                             52
+Problem not yet arise...
+
+                               Shared memory - X
+
+                                    Value = 10
+
+ State:  Register A                               Register A  State:
+Running  Value = 20                               Value = 0   Ready
+
+1 2.1 load memory X to         2.1 load memory X to
+                                       register A;
+               register A;
+                               2.2 minus 10 from register A;
+2 2.2 add 10 to register A;    2.3 write register A to
+
+      2.3 write register A to          memory X;
+               memory X;
+                                                                Process B
+     Process A
+
+                     Execution Flow #1, Step 2
+
+                                                                           53
+Problem not yet arise...
+
+                             Shared memory - X
+
+                                  Value = 20
+
+    State:    Register A                               Register A  State:
+   Running    Value = 20                               Value = 0   Ready
+
+1 2.1 load memory X to       2.1 load memory X to
+                                     register A;
+               register A;
+                             2.2 minus 10 from register A;
+2 2.2 add 10 to register A;  2.3 write register A to
+
+3  2.3 write register A to           memory X;
+           memory X;
+                                                              Process B
+   Process A
+
+                            Execution Flow #1, Step 3
+
+                                                                           54
+Problem not yet arise...
+
+                             Shared memory - X
+
+                                  Value = 20
+
+   State:     Register A                        Register A    State:
+   Ready      Value = 20                        Value = 20   Running
+
+1 2.1 load memory X to       2.1 load memory X to                       4
+
+               register A;                      register A;
+
+2 2.2 add 10 to register A;  2.2 minus 10 from register A;
+
+3  2.3 write register A to   2.3 write register A to
+           memory X;                 memory X;
+
+   Process A                Context Switching                Process B
+
+                            Execution Flow #1, Step 4
+
+                                                                                                                                         55
+Problem not yet arise...
+
+                             Shared memory - X
+
+                                  Value = 20
+
+   State:     Register A                        Register A    State:
+   Ready      Value = 20                        Value = 10   Running
+
+1 2.1 load memory X to       2.1 load memory X to                       4
+
+               register A;                      register A;
+
+2 2.2 add 10 to register A;  2.2 minus 10 from register A; 5
+
+3  2.3 write register A to   2.3 write register A to
+           memory X;                 memory X;
+
+   Process A                                                 Process B
+
+                            Execution Flow #1, Step 5
+
+                                                                                                                                         56
+Problem not yet arise...
+
+                             Shared memory - X
+
+                                  Value = 10
+
+   State:     Register A                        Register A    State:
+   Ready      Value = 20                        Value = 10   Running
+
+1 2.1 load memory X to       2.1 load memory X to                       4
+
+               register A;                      register A;
+
+2 2.2 add 10 to register A;  2.2 minus 10 from register A; 5
+
+3  2.3 write register A to   2.3 write register A to                    6
+           memory X;                 memory X;
+
+   Process A                                                 Process B
+
+                            Execution Flow #1, Step 6
+
+                                                                                                                                         57
+Execution Flow #2
+
+                                                                                                                     58
+Problem arise...
+
+                                 Shared memory - X
+
+                                      Value = 10
+
+ State:  Register A                                 Register A  State:
+Running  Value = 10                                 Value = 0   Ready
+
+1 2.1 load memory X to           2.1 load memory X to
+                                         register A;
+               register A;
+      2.2 add 10 to register A;  2.2 minus 10 from register A;
+      2.3 write register A to    2.3 write register A to
+
+               memory X;                 memory X;
+
+     Process A                                                    Process B
+
+                     Execution Flow #2, Step 1
+
+                                                                                                                                  59
+Problem arise...
+
+                                 Shared memory - X
+
+                                      Value = 10
+
+State:     Register A                               Register A    State:
+Ready      Value = 10                               Value = 10   Running
+
+1 2.1 load memory X to           2.1 load memory X to                       2
+
+               register A;                          register A;
+
+      2.2 add 10 to register A;  2.2 minus 10 from register A;
+
+      2.3 write register A to    2.3 write register A to
+               memory X;                 memory X;
+
+Process A              Context Switching                         Process B
+
+                       Execution Flow #2, Step 2
+
+                                                                                                                                    60
+Problem arise...
+
+                               Shared memory - X
+
+                                    Value = 10
+
+ State:    Register A                             Register A   State:
+Running    Value = 20                             Value = 10   Ready
+
+1 2.1 load memory X to         2.1 load memory X to                       2
+
+               register A;                        register A;
+
+3 2.2 add 10 to register A;    2.2 minus 10 from register A;
+
+      2.3 write register A to  2.3 write register A to
+               memory X;               memory X;
+
+Process A                      Context Switching               Process B
+
+                       Execution Flow #2, Step 3
+
+                                                                                                                                    61
+Problem arise...
+
+                               Shared memory - X
+
+                                    Value = 10
+
+State:     Register A                             Register A    State:
+Ready      Value = 20                             Value = 0    Running
+
+1 2.1 load memory X to         2.1 load memory X to                       2
+
+               register A;                        register A;
+
+3 2.2 add 10 to register A;    2.2 minus 10 from register A; 4
+
+      2.3 write register A to  2.3 write register A to
+               memory X;               memory X;
+
+Process A              Context Switching                       Process B
+
+                       Execution Flow #2, Step 4
+
+                                                                                                                                    62
+Problem arise...
+
+                               Shared memory - X
+
+                                    Value = 10
+
+State:  Register A                                Register A        State:
+Ready   Value = 20                                Value = 0        Running
+
+1 2.1 load memory X to         2.1 load memory X to                         2
+
+               register A;                        register A;
+
+3 2.2 add 10 to register A;    2.2 minus 10 from register A; 4
+
+      2.3 write register A to  2.3 write register A to
+               memory X;               memory X;
+
+Process A HELP!! No matter which process runs next, the result is  Process B
+             either 0 or 20, but not 10!
+                                                                                           63
+             The final result depends on the execution sequence!
+Race condition ­ the curse
+
+· The above scenario is called the race condition.
+
+· A race condition means
+
+   ­ the outcome of an execution depends on a particular
+      order in which the shared resource is accessed.
+
+· Remember: race condition is always a bad thing and
+  debugging race condition has no fun at all!
+
+   ­ It may end up ...
+
+         · 99% of the executions are fine.
+         · 1% of the executions are problematic.
+
+                                                                                                                                                                             64
+Race condition ­ the curse
+
+· For shared memory and files,                                    data
+   concurrent access may yield
+   unpredictable outcomes       Process                                 Process
+
+    ­ Race condition                                      read()        write()
+
+· Common situation                                                          File structure
+                                                                            in the kernel
+    ­ Resource sharing occurs frequently in OS
+                                                          Hard Disk
+           · EXP: Kernel DS maintaining a list of opened
+              files, maintaining memory allocation,                                                     65
+              process lists...
+
+    ­ Multicore brings an increased emphasis
+        on multithreading
+
+           · Multiple threads share global variables and
+              dynamically allocated memory
+
+· Process synchronization is needed
+

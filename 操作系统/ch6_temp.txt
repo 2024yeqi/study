@@ -1,0 +1,1860 @@
+Operating Systems
+
+Prof. Yongkun Li
+- 
+http://staff.ustc.edu.cn/~ykli
+
+                                                   Ch6
+                                Process Scheduling
+
+                                                                                                                                                                          1
+Outline        Process              Process                        User Space
+                                                                  Kernel Space
+      Process                                                     Scheduling
+
+            P            Process                                      Alg
+P                        lifecycle                                Scheduler
+
+            P                                                                            2
+
+Process Communication &             Process Scheduling
+      Synchronization
+                                                       Context-
+                                                       switching
+Why scheduling is needed
+
+· Process execution
+
+   ­ Consists of a cycle of CPU execution and I/O wait
+   ­ CPU burst + I/O burst
+
+                                       CPU burst duration
+
+                                                                                                                                                                               3
+Why scheduling is needed
+
+Question. How to improve CPU                Multiprogramming
+utilization (CPU is much faster than I/O)?     Multitasking
+
+Question. How to improve system
+responsiveness (interactive applications)?
+
+   A system may contain many processes which are at different
+              states (ready for running, waiting for I/O)
+
+Scheduling is required because the number of computing
+resource ­ the CPU ­ is limited.
+
+                                                                                                                                                                    4
+Topics
+   - Process lifecycle
+   - Process scheduling
+         - Context switching
+         - Scheduling criteria
+         - Scheduling algorithms
+         - Applications/Scenarios
+
+                                                                                                                                                                             5
+Topics
+   - Process lifecycle
+   - Process scheduling
+         - Context switching
+         - Scheduling criteria
+         - Scheduling algorithms
+         - Applications/Scenarios
+
+                                                                                                                                                                             6
+Programmer's point of view...
+
+· This is how a fresh programmer looks at a process'
+  life cycle.
+
+int main(void) {  Running  (3)          Termination
+      int x = 1;    (2)       (1)
+      getchar();
+      return x;
+
+}
+
+                            Waiting     Process
+                           for results  States
+
+                                                      7
+Kernel's point of view...
+
+                         Big Picture
+
+      New                                      Terminated
+(Just fork()-ed)
+                                                  (Zombie)
+
+                  Ready               Running
+
+                         Waiting               Process
+                         (blocked)             States
+
+                                                                           8
+Kernel's point of view...
+
+     The birth of a process.
+
+     Except the first process "init",
+
+New  every process is created using    Terminated
+
+     fork().
+
+     Ready                    Running
+
+              Waiting                  Process
+              (blocked)                States
+
+                                                                   9
+Kernel's point of view...
+
+New                        The process is ready.
+                    Ready  It means it is ready to run but is not
+                           running.
+
+                           A process may becomeT"erremaidnya"teadfter...
+                           - it is just created by fork();
+                           - it has been running on the CPU
+
+                             for some time and the OS chooses
+                             anotheRrunpnroincgess to run;
+                           - returning from blocked states.
+
+                           All ready processes are kept on a list
+
+                           Waitincaglled ready queue
+
+                           (blocked)                  Process
+
+                                                      States
+
+                                                                          10
+Kernel's point of view...
+
+     The procesBsiigsPriucntunrieng.
+
+     The OS chooses this process to be
+
+New  running on the CPU and changes            Terminated
+
+     its state to "Running".
+
+     Ready                            Running
+
+            Waiting
+
+                                               Process
+                                               States
+
+                                                                         11
+Kernel's point of view...
+
+     The procesBsiigsPbiclotucrkeed.
+
+     While the process is running, it
+
+New  may be waiting for something              Terminated
+
+     and becomes blocked voluntarily.
+
+     Ready                            Running
+
+            Waiting
+
+                                               Process
+                                               States
+
+                                                                         12
+Kernel's point of view...
+
+Example. Reading a file.      Big Picture
+
+Sometimes, the process has to wait for the response from the device and,
+
+thereforNee, wit is blocked.                            Terminated
+
+Nevertheless, this blocking state is interruptible. E.g., "Ctrl + C" can get
+
+the process out of the waiting state (but goes to termination state
+
+instead).  Ready                               Running
+
+                                 Waiting                             Process
+                              (interruptible)                        States
+
+                                                                                               13
+Kernel's point of view...
+
+Sometimes, a process needs to waBiitgfPoirctaurreesource but it doesn't want to
+be disturbed while it is waiting. In other words, the process wants that
+
+resource very much. Then, the process status is set to the uninterruptible
+
+status. New                                     Terminated
+
+             Ready                     Running
+
+                         Waiting                Process
+                    (uninterruptible)           States
+
+                                                                          14
+Kernel's point of view...
+
+Return back to ready.         Big Picture
+
+When response arrives, the status of the process changes back to Ready.
+
+from anyNoenwe of the blocked states.                    Terminated
+
+                                                Process  data
+
+                       Ready                    Running
+
+                                       Waiting
+
+                                                               Process
+                                                               States
+
+                                                                                         15
+Kernel's point of view...
+
+                                  Big Picture
+
+The process is going to die.
+
+The proNceewss may                                      Terminated
+- choose to terminate itself; or
+- force to be terminated.
+
+Ready                                          Running
+
+                                  Waiting
+
+                                                        Process
+                                                        States
+
+                                                                                  16
+What is scheduling?
+
+So, what is process scheduling?
+
+Ready                             Running
+
+                     Mainly about how to make all the ready
+                     processes become "Running"
+
+                     This is the called short-term scheduling
+                     or CPU scheduling.
+
+                                                               17
+Triggering Events
+
+· When process scheduling happens:
+
+A new process is  When "fork()" is invoked and returns successfully.
+created.
+                  Then, whether the parent or the child is scheduled is up to the
+                  scheduler's decision.
+
+An existing process The CPU is freed. The scheduler should choose another process to run.
+is terminated.
+
+A process waits for The CPU is freed. The scheduler should choose another process to run.
+I/O.
+
+A process finishes The interrupt handling routine makes a scheduling request, if
+waiting for I/O. necessary.
+
+                                                                                   18
+Key Issues
+
+            Ready  Running
+
+                              Question #1: How to make a ready process
+                              become running? (Note that the running
+                              process may not terminate at that time)
+                              Context switching
+Question #2: How to decide which process should be running?
+Scheduling criteria & scheduling algorithms
+Question #3: How to design scheduling in a real/specific system?
+Multiprocessor system, real-time system, algorithm evaluation
+
+                                                                                                                                               19
+Topics
+   - Process lifecycle
+   - Process scheduling
+         - Context switching
+         - Scheduling criteria
+         - Scheduling algorithms
+         - Applications/Scenarios
+
+                                                                                                                                                                            20
+What is context switching?
+
+· Before we can jump into the process scheduling
+  topic, we have to understand what "context
+  switching" is.
+
+P1  P2  P3                                            P2
+
+Scheduling is the procedure that decides which            Timer interrupt.
+process to run next.                                      Hardware interrupt.
+
+Context switching is the actual switching procedure,                                           21
+from one process to another.
+Switching from one process to another.
+
+Suppose this process gives up running on the CPU,                System Memory
+e.g., calling sleep(). Then:
+                                                                     User-space
+Running  Waiting                                                      memory
+
+Now, it is time for the scheduler to choose the next
+process to run.
+
+                  Program counter                     (1)        Scheduler
+                                                          (3)     sleep()
+                   Other Register                           (2)
+                        values
+
+                                                                 Kernel-space
+
+                                                                                 22
+Switching from one process to another.
+
+But, before the scheduler can seize the control of the             System Memory
+CPU, a very important step has to be taken:
+                                                                       User-space
+Backup all registers' values.                                           memory
+
+The backup will be stored in the process structure
+
+ The context of a process    Program counter            (1)        Scheduler
+                                                            (3)     sleep()
+The union of the user-space   Other Register                  (2)
+memory and the registers'          values
+
+    values of the process
+
+                                                        backup     Kernel-space
+
+                                                                                   23
+Switching from one process to another.
+
+Say, the scheduler decides to schedule another     System Memory
+process.
+                                                       User-space
+Then, the schedule has to load the context of the       memory
+new process into the main memory and into the
+CPU.
+
+We call the entire  Program counter                              (4)
+operation:
+                     Other Register                load
+context switching         values
+
+                                                                      24
+Context switching has a price to pay...
+
+· However, context switching may be expensive...
+
+   ­ Even worse, the target process may be currently stored
+      in the hard disk.
+
+· So, minimizing the number of context switching
+  may help boost system performance.
+
+  CPU              Process B                         My turn!
+
+PRreogciesstseArs  Main MPermoceosrsyC   Process E
+
+(running)           Process D           PHroacredssDF isk
+
+  Cache                                     Process G
+
+                   Expensive I/O swap
+
+                                                               25
+Topics
+   - Process lifecycle
+   - Process scheduling
+         - Context switching
+         - Scheduling criteria
+         - Scheduling algorithms
+         - Applications/Scenarios
+
+                                                                                                                                                                            26
+Scheduling Criteria
+
+· How to choose which algorithm to use in a
+  particular situation?
+
+      Types             Algorithm Properties
+ Preemptive     CPU utilization Throughput
+ Nonpreemptive  Turnaround time Waiting time
+                Response time
+  Application
+Multiprocessor  Application requirements and algorithm
+Real-time sys       properties may vary significantly
+
+                                                        27
+Classes of process scheduling
+
+· Non-preemptive scheduling.
+
+What is it?  When a process is chosen by the scheduler, the process would never
+                                      leave the scheduler until...
+
+                              -the process voluntarily waits for I/O, or
+                    -the process voluntarily releases the CPU, e.g., exit().
+
+What is the If the process is purely CPU-bound, it will seize the CPU from the time it is
+
+catch?       chosen until it terminates.
+
+Pros         Good for systems that emphasize the time in finishing tasks.
+              - Because the task is running without others' interruption.
+
+Cons         Bad for nowadays systems in which user experience and multi-tasking
+                                          are the primary goals.
+
+Where can I  Nowhere...but it could be found back in the mainframe computers in
+   find it?                                        1960s.
+
+                                                                                           28
+Classes of process scheduling
+
+· Preemptive scheduling.
+
+What is it?  When a process is chosen by the scheduler, the process would never
+                                      leave the scheduler until...
+
+                              -the process voluntarily waits for I/O, or
+                    -the process voluntarily releases the CPU, e.g., exit().
+                    -particular kinds of interrupts and events are detected.
+
+What is the If that particular event is the periodic clock interrupt, then you can have
+
+catch?                    a time-sharing system.
+
+Pros             Good for systems that emphasize interactiveness.
+             - Because every task will receive attentions from the CPU.
+
+Cons         Bad for systems that emphasize the time in finishing tasks.
+
+Where can I  Everywhere! This is the design of nowadays systems.
+   find it?
+
+                                                                                         29
+Performance measures
+
+  In algorithm design:
+
+  What factors/performance measures
+  should be carefully considered?
+
+                                     Turnaround
+                                         time
+
+      Throughput                               Waiting
+                                                 time
+   CPU
+utilization                          Response
+                                        time
+
+                                                        30
+Performance measures
+
+CPU utilization.                              Turnaround
+                                                  time
+We want to keep CPU as busy as possible.
+
+Theoretically, can range from 0-100%, but in
+real system, range from 40%-90%
+
+The higher the better
+
+                            Throughput                  Waiting
+                                                          time
+                         CPU
+                      utilization             Response
+                                                 time
+
+                                                                 31
+Performance measures
+
+Throughput.
+
+Number of processes that are completed per
+time unit
+
+The higher the better
+
+                                            Turnaround
+                                                time
+
+                            Throughput                Waiting
+                                                        time
+                         CPU
+                      utilization           Response
+                                               time
+
+                                                               32
+Performance measures
+
+Turnaround time.                            Turnaround
+                                                time
+Time to execute the process: interval from
+the time of submission to the time of
+completion (total running time + waiting
+time+ doing I/O)
+
+The lower the better
+
+                            Throughput                Waiting
+                                                        time
+                         CPU
+                      utilization           Response
+                                               time
+
+                                                               33
+Performance measures
+
+Waiting time.
+The time spent waiting in the ready queue
+The lower the better
+
+                                           Turnaround
+                                               time
+
+                            Throughput               Waiting
+                                                       time
+                         CPU
+                      utilization          Response
+                                              time
+
+                                                              34
+Performance measures
+
+Response time.                                Turnaround
+                                                  time
+The time from the submission of a request
+until the first response is produced (useful
+measure for interactive systems)
+
+The lower the better
+
+                            Throughput                  Waiting
+                                                          time
+                         CPU
+                      utilization             Response
+                                                 time
+
+                                                                 35
+Challenge
+
+Question:                                Common
+                                            goal
+Can we optimize all the above
+measures simultaneously?
+
+Usually can not!    Big                      Policy         Big
+                  conflict               enforcement      conflict
+         Design
+        Tradeoff                                          CPU-I/O
+                                                          Balance
+                               Fairness
+
+                                         Little conflict
+
+                                                                    36
+Topics
+   - Process lifecycle
+   - Process scheduling
+         - Context switching
+         - Scheduling criteria
+         - Scheduling algorithms
+         - Applications/Scenarios
+
+                                                                                                                                                                            37
+Scheduling algorithms
+
+· Inputs to the algorithms.
+
+ A set of   P1       P2           P3  P4
+processes
+
+For each    Arrival       CPU         It is interesting to note that
+process...   Time    requirement      this is a non-sense!
+
+                                      How can we know the
+                                      requirement of each task?
+
+Online      An offline scheduling algorithm assumes that you know all the
+  VS        processes submitted to the system before hand. But, an online
+            scheduling algorithm does not have such an assumption.
+Offline
+            Yet, every real scheduler has to work in an "online scenario". So, we
+            have to think in an "online" way...
+
+                                                                                   38
+Scheduling algorithms
+
+· Outputs of the algorithms.
+
+Scheduling  Individual & average
+   order      turnaround time
+
+            Individual & average
+                 waiting time
+
+             Number of context
+                  switching
+
+                                  39
+Different algorithms
+
+       Algorithms         Preemptive?   Target System
+First-come, first-served
+                          No.           Out-of-date
+  or First-in, First-out
+          (FIFO)          Can be both.  Out-of-date
+
+Shortest-job-first (SJF)  Yes.          Modern
+
+   Round-robin (RR)       Yes.          Modern
+
+  Priority scheduling     The real implementation!
+
+  Priority scheduling
+with multiple queues.
+
+                                                       40
+First-come, first-served scheduling
+
+· Example 1.
+
+Gantt Chart       No preemption                         Output
+
+              P1                              P2 P3
+
+0246811111222223
+                                      02468024680
+
+Waiting time: P1 = 0; P2 = 23; P3 = 25;       Task Arrival CPU
+Average waiting time = (0+23+25)/3 = 16;                 Time Req.
+
+Turnaround time: P1 = 24; P2 = 26; P3 = 28;   P1     0  24
+Average turnaround time = (24+26+28)/3 = 26;
+                                              P2     1  3
+
+                                              P3     2  3
+
+                                                        Input
+
+                                                                    41
+First-come, first-served scheduling
+
+· Example 2.
+
+Gantt Chart                                        Output
+
+P3 P2         P1
+
+0246811111222223
+                                      02468024680
+
+Waiting time: P1 = 4; P2 = 2; P3 = 0;       Task Arrival CPU
+Average waiting time = (4+2+0)/3 = 2;                  Time Req.
+(which is 16 in the previous case)
+                                            P3  0            3
+Turnaround time: P1 = 28; P2 = 5; P3 = 3;
+Average turnaround time = (28+5+3)/3 = 12;  P2  1            3
+(which is 26 in the previous case)
+                                            P1  2            24
+
+                                                Input order
+                                                 changed
+
+                                                                  42
+First-come, first-served scheduling
+
+· A short summary:
+
+   ­ FIFO scheduling is sensitive to the input.
+
+   ­ The average waiting time is often long. Think about the
+      scenario (convoy effect):
+
+         · Someone is standing before you in the queue in KFC, and
+         · you find that he/she is ordering the bucket chicken meal (P1 in
+
+           example 1)!!!!
+         · So, two people (P2 and P3) are unhappy while only P1 is happy.
+
+   ­ Can we do something about this?
+
+                                                                                                                                                                             43
+Different algorithms
+
+       Algorithms         Preemptive?   Target System
+First-come, first-served
+                          No.           Out-of-date
+  or First-in, First-out
+          (FIFO)          Can be both.  Out-of-date
+
+Shortest-job-first (SJF)  Yes.          Modern
+
+   Round-robin (RR)       Yes.          Modern
+
+  Priority scheduling     The real implementation!
+
+  Priority scheduling
+with multiple queues.
+
+                                                       44
+Non-preemptive SJF
+
+   P1P1 P1P1
+
+0  2                 4   6      8              1  1      1     1
+
+                                               0  2      4     6
+
+   Time = 2540           Not allow preemption
+
+   Set of processes                                  Task Arrival CPU
+                                                                Time Req.
+
+                                                     P1     0     7
+
+   P1                P2     P3     P4                P2     2     4
+
+                                                     P3     4     1
+
+                                                     P4     5     4
+
+                                                                           45
+Non-preemptive SJF
+
+             P1
+
+0  2                 4   6      8      1  1      1     1
+
+                                       0  2      4     6
+
+   Time = 7
+
+   Set of processes                          Task Arrival CPU
+                                                        Time Req.
+
+                                             P1     0     7
+
+   P1                P2     P3     P4        P2     2     4
+
+                                             P3     4     1
+
+                                             P4     5     4
+
+                                                                   46
+Non-preemptive SJF
+
+             P1                 P3
+
+0  2                 4   6          8      1  1      1     1
+
+                                           0  2      4     6
+
+   Time = 7
+
+   Set of processes                              Task Arrival CPU
+                                                            Time Req.
+
+                                                 P1     0     7
+
+   P1                P2     P3         P4        P2     2     4
+
+                                                 P3     4     1
+
+                                                 P4     5     4
+
+                                                                       47
+Non-preemptive SJF
+
+                                In this example, we use FIFO to break the tie.
+
+             P1                 P3 P2
+
+0  2                 4   6      8          1  1      1     1
+
+                                           0  2      4     6
+
+   Time = 8
+
+   Set of processes                              Task Arrival CPU
+                                                            Time Req.
+
+                                                 P1     0     7
+
+   P1                P2     P3         P4        P2     2     4
+
+                                                 P3     4     1
+
+                                                 P4     5     4
+
+                                                                                48
+Non-preemptive SJF
+
+               P1               P3         P2     P4 P4
+
+0  2                 4   6          8      1   1      1     1
+
+                                           0   2      4     6
+
+   Time = 162
+
+   Set of processes                               Task Arrival CPU
+                                                             Time Req.
+
+                                                  P1     0     7
+
+   P1                P2     P3         P4         P2     2     4
+
+                                                  P3     4     1
+
+                                                  P4     5     4
+
+                                                                        49
+Non-preemptive SJF
+
+      P1             P3             P2       P4 P4
+
+0  2           4  6      8             1  1      1     1
+
+                                       0  2      4     6
+
+Waiting time:
+
+   P1 = 0; P2 = 6; P3 = 3; P4 = 7;
+
+   Average = (0 + 6 + 3 + 7) / 4 = 4.        Task Arrival CPU
+                                                        Time Req.
+
+                                             P1     0     7
+
+Turnaround time:                             P2     2     4
+    P1 = 7; P2 = 10; P3 = 4; P4 = 11;
+    Average = (7 + 10 + 4 + 11) / 4 = 8.     P3     4     1
+
+                                             P4     5     4
+
+                                                                   50
+Preemptive SJF
+
+0  2  4         6  8  1                             1      1            1
+
+                      0                             2      4            6
+
+Rules for preemptive scheduling                        Task Arrival  CPU Req.
+(for this example only)
+                                                           Time Initial & Remain
+-Preemption happens when a new process arrives at
+the system.                                            P1  0         7     7
+
+-Then, the scheduler steps in and selects the next     P2  2         4     4
+task based on their remaining CPU requirements.
+                                                       P3  4         1     1
+                  Shortest-remaining-time-first
+                                                       P4  5         4     4
+
+                                                                                  51
+Preemptive SJF
+
+   P1
+
+0      2             4  6  8  1  1      1            1
+
+                              0  2      4            6
+
+       Time = 0
+
+   Set of processes                 Task Arrival  CPU Req.
+         P1
+                                        Time Initial & Remain
+
+                                    P1  0         7     7
+
+                                    P2  2         4     4
+
+                                    P3  4         1     1
+
+                                    P4  5         4     4
+
+                                                               52
+Preemptive SJF
+
+   P1 P2
+
+0  2                 4   6  8                         1  1      1            1
+
+                                                      0  2      4            6
+
+   Time = 2                 PP2riesesmelpetcetedd! !
+
+   Set of processes                                         Task Arrival  CPU Req.
+
+                                                                Time Initial & Remain
+
+                                                            P1  0         7     5
+
+   P1                P2                                     P2  2         4     4
+
+                                                            P3  4         1     1
+
+                                                            P4  5         4     4
+
+                                                                                       53
+Preemptive SJF
+
+   P1        P2 P3
+
+0      2             4   6      8                     1  1      1            1
+
+                                                      0  2      4            6
+
+   Time = 4                 PP3riesesmelpetcetedd! !
+
+   Set of processes                                         Task Arrival  CPU Req.
+
+                                                                Time Initial & Remain
+
+                                                            P1  0         7     5
+
+       P1            P2     P3                              P2  2         4     2
+
+                                                            P3  4         1     1
+
+                                                            P4  5         4     4
+
+                                                                                       54
+Preemptive SJF
+
+   P1        P2 P3 P2
+
+0      2             4   6      8                     1  1      1            1
+
+                                                      0  2      4            6
+
+   Time = 5                 PP2riesesmelpetcetedd! !
+
+   Set of processes                                         Task Arrival  CPU Req.
+
+                                                                Time Initial & Remain
+
+                                                            P1  0         7     5
+
+       P1            P2     P3     P4                       P2  2         4     2
+
+                                                            P3  4         1     0
+
+                                                            P4  5         4     4
+
+                                                                                       55
+Preemptive SJF
+
+   P1      P2 P3 P2 P4 P4                 P1         P1
+
+0      2             4   6      8      1      1          1        1
+
+                                       0      2          4        6
+
+   TTimimee==1716
+
+   Set of processes                              Task Arrival  CPU Req.
+
+                                                     Time Initial & Remain
+
+                                                 P1      0     7     50
+
+       P1            P2     P3     P4            P2      2     4     0
+
+                                                 P3      4     1     0
+
+                                                 P4      5     4     04
+
+                                                                            56
+Preemptive SJF
+
+   P1     P2 P3 P2 P4 P4                  P1         P1
+
+0      2       4  6  8                 1      1          1        1
+
+                                       0      2          4        6
+
+Waiting time:
+
+   P1 = 9; P2 = 1; P3 = 0; P4 = 2;
+
+   Average = (9 + 1 + 0 + 2) / 4 = 3.            Task Arrival  CPU Req.
+
+                                                     Time Initial & Remain
+
+Turnaround time:                                 P1      0     7     50
+    P1 = 16; P2 = 5; P3 = 1; P4 = 6;
+    Average = (16 + 5 + 1 + 6) / 4 = 7.          P2      2     4     0
+
+                                                 P3      4     1     0
+
+                                                 P4      5     4     04
+
+                                                                            57
+SJF: Short summary
+
+                         Non-preemptive SJF  Preemptive SJF
+                                               3 (smallest)
+Average waiting time     4                     7 (smallest)
+                                                     5
+Average turnaround time  8
+
+# of context switching   3 (smallest)
+
+The waiting time and the turnaround time decrease  Task Arrival CPU
+at the expense of the increased number of context             Time Req.
+switching.
+                                                   P1        0  7
+
+                                                   P2        2  4
+
+                                                   P3        4  1
+
+                                                   P4        5  4
+SJF: Short summary
+
+                         Non-preemptive SJF  Preemptive SJF
+                                               3 (smallest)
+Average waiting time     4                     7 (smallest)
+                                                     5
+Average turnaround time  8
+
+# of context switching   3 (smallest)
+
+SJF is provably optimal in that it gives the minimum  Task Arrival CPU
+average waiting time                                             Time Req.
+
+Challenge: How to know the length of the next CPU     P1     0  7
+request?
+                                                      P2     2  4
+
+                                                      P3     4  1
+
+                                                      P4     5  4
+SJF: Short summary                                          General approach
+                                                            exponential average
+     Challenge: How to know the length of the next CPU
+     request?
+     Solution: Prediction (by expecting that the next CPU
+     burst will be similar in length to the previous ones)
+
+                                                            Predicted
+                                                              value
+
+                                                             Most recent information
+Different algorithms
+
+       Algorithms         Preemptive?   Target System
+First-come, first-served
+                          No.           Out-of-date
+  or First-in, First-out
+          (FIFO)          Can be both.  Out-of-date
+
+Shortest-job-first (SJF)  Yes.          Modern
+
+   Round-robin (RR)       Yes.          Modern
+
+  Priority scheduling     The real implementation!
+
+  Priority scheduling
+with multiple queues.
+
+                                                       61
+Round-robin
+
+· Round-Robin (RR) scheduling is preemptive.
+
+   ­ Every process is given a quantum, or the amount of time
+      allowed to execute.
+
+   ­ When the quantum of a process is used up (i.e., 0), the
+      process releases the CPU and this is the preemption.
+
+   ­ Then, the scheduler steps in and it chooses the next
+      process which has a non-zero quantum to run.
+
+· Processes are running one-by-one, like a circular
+  queue.
+
+   ­ Designed specially for time-sharing systems
+
+                                                                                                                                                                             62
+Round-robin
+
+Rules for Round-Robin                                   Task Arrival  CPU Req.
+(for this example only)
+                                                            Time Initial & Remain
+-The quantum of every process is fixed and is 2 units.
+                                                        P1  0         7  7
+-The process queue is sorted according the processes'
+arrival time, in an ascending order.
+(This rule allows us to break tie.)
+
+                                                        P2  2         4  4
+
+                                                        P3  4         1  1
+
+                                                        P4  5         4  4
+
+                                                                                   63
+Round-robin
+
+   P1
+
+0      2             4  6  8  1  1      1            1
+
+                              0  2      4            6
+
+       Time = 0
+
+   Set of processes                 Task Arrival  CPU Req.
+
+         P1                             Time Initial & Remain
+        Q:2
+                                    P1  0         7     7
+
+                                    P2  2         4     4
+
+                                    P3  4         1     1
+
+                                    P4  5         4     4
+
+                                                               64
+Round-robin
+
+   P1 P2
+
+0  2                 4    6  8                1  1      1            1
+
+                                              0  2      4            6
+
+   Time = 2               P1's quantum is 0;
+                            P2 is selected!
+
+   Set of processes                                 Task Arrival  CPU Req.
+
+                                                        Time Initial & Remain
+
+                                                    P1  0         7     5
+
+   P1                P2                             P2  2         4     4
+
+   Q:0               Q:2                            P3  4         1     1
+
+                                                    P4  5         4     4
+
+                                                                               65
+Round-robin
+
+   P1        P2 P3
+
+0      2             4    6       8                  1  1      1            1
+
+                                                     0  2      4            6
+
+   Time = 4               P1's & P2's quanta are 0;
+                                P3 is selected!
+
+   Set of processes                                        Task Arrival  CPU Req.
+
+                                                               Time Initial & Remain
+
+                                                           P1  0         7     5
+
+       P1            P2      P3                            P2  2         4     2
+
+       Q:0           Q:0     Q:2                           P3  4         1     1
+
+                                                           P4  5         4     4
+
+                                                                                      66
+Round-robin
+
+   P1        P2 P3 P4
+
+0      2             4    6       8                  1  1      1            1
+
+                                                     0  2      4            6
+
+   Time = 5               P1's & P2's quanta are 0;
+                                P4 is selected!
+
+   Set of processes                                        Task Arrival  CPU Req.
+
+                                                               Time Initial & Remain
+
+                                                           P1  0         7     5
+
+       P1            P2      P3      P4                    P2  2         4     2
+
+       Q:0           Q:0     Q:2     Q:2                   P3  4         1     0
+
+                                                           P4  5         4     2
+
+                                                                                      67
+Round-robin
+
+   P1        P2 P3 P4 P1
+
+0      2             4     6       8        1        1      1            1
+
+                                            0        2      4            6
+
+   Time = 7                Now, recharge is needed.
+                                 P1 is selected.
+
+   Set of processes                                     Task Arrival  CPU Req.
+
+                                                            Time Initial & Remain
+
+                                                        P1  0         7     5
+
+       P1            P2       P3      P4                P2  2         4     2
+
+       Q:02          Q:02     Q:2     Q:02              P3  4         1     0
+
+                                                        P4  5         4     2
+
+                                                                                   68
+Round-robin
+
+   P1        P2 P3 P4              P1 P2
+
+0      2             4     6       8           1  1      1            1
+
+                                               0  2      4            6
+
+   Time = 9                P1's quantum is 0;
+                             P2 is selected!
+
+   Set of processes                                  Task Arrival  CPU Req.
+
+                                                         Time Initial & Remain
+
+                                                     P1  0         7     3
+
+       P1            P2       P3      P4             P2  2         4     2
+
+       Q:0           Q:02     Q:2     Q:02           P3  4         1     0
+
+                                                     P4  5         4     2
+
+                                                                                69
+Round-robin
+
+   P1       P2 P3 P4               P1          P2 P4
+
+0      2             4     6       8           1      1      1            1
+
+                                               0      2      4            6
+
+   Time = 11               P1's quantum is 0;
+                             P4 is selected!
+
+   Set of processes                                      Task Arrival  CPU Req.
+
+                                                             Time Initial & Remain
+
+                                                         P1  0         7     3
+
+       P1            P2       P3       P4                P2  2         4     0
+
+       Q:0           Q:02     Q:2      Q:02              P3  4         1     0
+
+                                                         P4  5         4     2
+
+                                                                                    70
+Round-robin
+
+   P1        P2 P3 P4              P1        P2      P4 P1
+
+0      2             4     6       8         1       1      1            1
+
+                                             0       2      4            6
+
+   Time = 13               Now, recharge is needed.
+                                 P1 is selected.
+
+   Set of processes                                     Task Arrival  CPU Req.
+
+                                                            Time Initial & Remain
+
+                                                        P1  0         7     3
+
+       P1            P2       P3       P4               P2  2         4     0
+
+       Q:02          Q:20     Q:2      Q:20             P3  4         1     0
+
+                                                        P4  5         4     0
+
+                                                                                   71
+Round-robin
+
+   P1        P2 P3 P4              P1        P2      P4      P1 P1
+
+0      2             4     6       8         1       1       1            1
+
+                                             0       2       4            6
+
+   Time = 15               Now, recharge is needed.
+                                 P1 is selected.
+
+   Set of processes                                      Task Arrival  CPU Req.
+
+                                                             Time Initial & Remain
+
+                                                         P1  0         7     1
+
+       P1            P2       P3       P4                P2  2         4     0
+
+       Q:20          Q:20     Q:2      Q:02              P3  4         1     0
+
+                                                         P4  5         4     0
+
+                                                                                    72
+Round-robin
+
+   P1     P2 P3 P4   P1             P2    P4      P1 P1
+
+0      2       4  6  8              1     1       1            1
+
+                                    0     2       4            6
+
+Waiting time:
+
+   P1 = 9; P2 = 5; P3 = 0; P4 = 4;
+
+   Average = (9 + 5 + 0 + 4) / 4 = 4.5        Task Arrival  CPU Req.
+
+                                                  Time Initial & Remain
+
+                                              P1  0         7     0
+
+Turnaround time:                              P2  2         4     0
+    P1 = 16; P2 = 9; P3 = 1; P4 = 8;
+    Average = (16 + 9 + 1 + 8) / 4 = 8.5      P3  4         1     0
+
+                                              P4  5         4     0
+
+                                                                         73
+RR VS SJF
+
+Average waiting time    Non-preemptive  Preemptive SJF       RR
+                                SJF             3       4.5 (largest)
+Average turnaround               4              7       8.5 (largest)
+time                                            5        8 (largest)
+                                 8
+# of context switching
+                                 3
+
+So, the RR algorithm gets all the bad! Why do we still need it?
+The responsiveness of the processes is great under the RR algorithm. E.g., you
+won't feel a job is "frozen" because every job is on the CPU from time to time!
+
+                                                                                                                                                                  74
+Round-robin
+
+      Issue for Round-Robin
+      -How to set the size of the time quantum?
+      -Too large: FCFS
+      -Too small: frequent context switch
+      -In practice: 10-100ms
+      -A rule of thumb: 80% CPU burst should be shorter than the
+      time quantum
+
+                                                                                                                                                                             75
+Observations on RR
+
+· Modified versions of round-robin are implemented
+  in (nearly) every modern OS.
+
+   ­ Users run a lot of interactive jobs on modern OS-es.
+   ­ Users' priority list:
+
+         · Number one - Responsiveness;
+         · Number two - Efficiency;
+         · In other words, "ordinary users" expect a fast GUI response
+
+           than an efficient scheduler running behind.
+
+· With the round-robin deployed, the scheduling
+  looks like random.
+
+   ­ It also looks like "fair to all processes".
+
+                                                                                                                                                                             76
+Different algorithms
+
+       Algorithms         Preemptive?   Target System
+First-come, first-served
+                          No.           Out-of-date
+  or First-in, First-out
+          (FIFO)          Can be both.  Out-of-date
+
+Shortest-job-first (SJF)  Yes.          Modern
+
+   Round-robin (RR)       Yes.          Modern
+
+  Priority scheduling     The real implementation!
+
+  Priority scheduling
+with multiple queues.
+
+                                                       77
+Priority Scheduling
+
+· Some basics:
+
+   ­ A task is given a priority (and is usually an integer).
+   ­ A scheduler selects the next process based on the
+
+      priority.
+
+         · A typical practice: the highest priority is always chosen.
+
+   ­ Special case: SJF, FCFS (equal priority)
+
+· How to define priority
+
+   ­ Internally: time limits, memory requirements, number of
+      open files, CPU burst and I/O burst...
+
+   ­ Externally: process importance, paid funds...
+
+                                                                                                                                                                             78
+Priority Scheduling
+
+   P2     P5                             P1                   P3 P4
+
+0      2      4  6                    8      1       1        1         1
+
+                                             0       2        4         6
+
+Assumption:                                             Task     CPU       Priority
+
+-All arrive at time 0                                            Burst
+-Low numbers represent high priority
+
+                                                        P1       7         3
+
+Problem: Indefinite blocking or starvation              P2       1         1
+
+Solution: Aging (gradually increase the priority of     P3       2         4
+waiting processes)
+                                                        P4       1         5
+
+                                                        P5       5         2
+
+                                                                                     79
+Different algorithms
+
+       Algorithms         Preemptive?   Target System
+First-come, first-served
+                          No.           Out-of-date
+  or First-in, First-out
+          (FIFO)          Can be both.  Out-of-date
+
+Shortest-job-first (SJF)  Yes.          Modern
+
+   Round-robin (RR)       Yes.          Modern
+
+  Priority scheduling     The real implementation!
+
+  Priority scheduling
+with multiple queues.
+
+                                                       80
+Multilevel queue scheduling
+
+· Definitions.
+
+   ­ It is still a priority scheduler.
+   ­ But, at each priority class, different schedulers may be
+
+      deployed.
+   ­ Eg: Foreground processes and background processes
+
+Priority class 5     Non-preemptive, FIFO                Just an example.
+Priority class 4      Non-preemptive, SJF
+Priority class 3  RR with quantum = 10 units.  The processes are
+Priority class 2  RR with quantum = 20 units.  permanently assigned to
+Priority class 1  RR with quantum = 40 units.  one queue
+
+                                               Fixed-priority preemptive
+                                               scheduling among queues
+
+                                                                           81
+Multilevel queue scheduling­ an example
+
+· Properties: process is assigned a fix priority when
+  they are submitted to the system.
+
+        Priority 4   E.g., using round-robin in each queue.
+        Priority 3
+        Priority 2                                                                                              82
+        Priority 1
+
+Increasing priority
+Multilevel queue scheduling­ an example
+
+· The highest priority class will be selected.
+
+    ­ To prevent high-priority tasks from running indefinitely.
+    ­ The tasks with a higher priority should be short-lived, but
+
+      important;
+
+     Priority class 4  E.g., using round-robin in each queue.
+     Priority class 3
+     Priority class 2                                                                                             83
+     Priority class 1
+
+Increasing priority
+Multilevel queue scheduling­ an example
+
+· Lower priority classes will be scheduled only when
+  the upper priority classes has no tasks.
+
+     Priority class 4  E.g., using round-robin in each queue.
+     Priority class 3
+     Priority class 2                                                                                             84
+     Priority class 1
+
+Increasing priority
+Multilevel queue scheduling­ an example
+
+· Of course, it is a good design to have a high-priority
+  task preempting a low-priority task.
+
+   (conditioned that the high-priority task is short-lived.)
+
+     Priority class 4  E.g., using round-robin in each queue.
+     Priority class 3
+     Priority class 2                                                                                             85
+     Priority class 1
+
+Increasing priority
+Multilevel queue scheduling­ an example
+
+· Any problem?
+
+   ­ Fixed priority
+   ­ Indefinite blocking or starvation
+
+     Priority class 4  E.g., using round-robin in each queue.
+     Priority class 3
+     Priority class 2                                                                                             86
+     Priority class 1
+
+Increasing priority
+Multilevel feedback queue scheduling
+
+· How to improve the previous scheme?
+
+   ­ Allows a process to move between queues (dynamic
+      priority).
+
+   ­ Why needed?
+
+         · Eg.: Separate processes according to their CPU bursts.
+
+Priority class 5     Non-preemptive, FIFO            Just an example.
+Priority class 4      Non-preemptive, SJF
+Priority class 3  RR with quantum = 10 units.  A process drops to a
+Priority class 2  RR with quantum = 20 units.  lower priority class
+Priority class 1  RR with quantum = 40 units.  after it has used up its
+                                               quantum and has the
+                                               quantum recharged.
+
+                                                                         87
+Multilevel feedback queue scheduling
+
+· How to design (factors)?
+
+   ­ Number of queues
+   ­ Scheduling algorithm for each queue
+   ­ Method for determining when to upgrade/downgrade a
+
+      process
+   ­ Method for determining which queue a process will
+
+      enter
+
+· Most general, but also most complex
+
+   ­ Can be configured to match a specific system
+
+                                                                                                                                                                             88
+Summary                                       Priority scheduler
+                                               guarantees this.
+· Did we solve the conflict?
+
+  Big                                Policy     Big
+conflict                         enforcement  conflict
+
+                       Fairness                    CPU-I/O
+                                                    Balance
+Round-robin scheduler
+    guarantees this.             Little conflict
+
+                                                             "Not to schedule blocked
+                                                              process" guarantee this.
+
+Multilevel feedback queue scheduling
+
+                                                                                                                                   89
+- Applications/Scenarios
+      - Real-time systems
+      - Multiple processors
+      - Example: Linux scheduler
+      - Algorithm evaluation
+
+                                                                                                                                                                            90
+- Applications/Scenarios
+      - Real-time systems
+      - Multiple processors
+      - Example: Linux scheduler
+      - Algorithm evaluation
+
+                                                                                                                                                                            91
+Real-time CPU Scheduling
+
+                             Antilock brake system: Latency requirement: 3-5 ms
+
+                             Hard real-time systems: A task must be served by its
+                             deadline (otherwise, expired as no service at all)
+
+                             Soft real-time systems: Critical processes will be given
+                             preference over noncritical processes (no guarantee)
+
+Responsiveness: Respond      Interrupt latency (minimize or bounded):
+immediately to a real-time    Determining interrupt type and save the state of the
+process as soon as it
+requires the CPU                current process
+                              Minimize the time interrupts may be disabled
+Support priority-based alg.
+with preemption              Dispatch latency:
+                              Time required by dispatcher (preemption running
+
+                                process and release resources of low-priority proc).
+                              Most effective way is to use preemptive kernel
+
+                                                                                       92
+Real-time CPU Scheduling Algorithms
+
+       Rate monotonic scheduling
+       Assumption: Processes require CPU at constant periods: processing time t and period
+       p (rate 1/p)
+       Each process is assigned a priority proportional to its rate, and schedule processes
+       with a static priority policy with preemption (fixed priority)
+       Example
+       P1: p1=50, t1=20
+       P2: p2=100, t2=35
+
+                                                                                                                                                                             93
+Real-time CPU Scheduling Algorithms
+
+Rate monotonic scheduling  Any problem?
+
+Processes require CPU at constant periods: processing time t and period p (rate 1/p)
+
+Each process is assigned a priority proportional to its rate, and schedule processes
+with a static priority policy with preemption (fixed priority)
+
+Example
+
+P1: p1=50, t1=25
+P2: p2=80, t2=35
+
+Can not guarantee that a set of processes can be scheduled
+
+                                                                                      94
+Real-time CPU Scheduling Algorithms
+
+       Earliest-deadline-first scheduling (EDF)
+       Dynamically assigns priorities according to deadline (the earlier the deadline, the
+       higher the priority)
+
+       Example
+       P1: p1=50, t1=25
+       P2: p2=80, t2=35
+
+      EDF does not require the processes to be periodic, nor require a constant
+      CPU time per burst
+
+      EDF requires the announcement of deadlines
+
+                                                                                                                                                                             95
+- Applications/Scenarios
+      - Real-time systems
+      - Multiple processors
+      - Example: Linux scheduler
+      - Algorithm evaluation
+
+                                                                                                                                                                            96
+Scheduling Issues with SMP
+
+                                        SMP: Each processor may have its private
+                                                  queue of ready processes
+
+                                        Scheduling between processors
+
+                                        Process migration: Invalidating the cache
+                                        of the first processor and repopulating
+                                        the cache of the second processor)
+
+                                        Process migration is costly
+
+Processor Affinity          NUMA                       Load balancing
+Attempt to keep a    CPU scheduler and  Push migration: a specific task
+process running on   memory-placement   periodically check the status & rebalance
+the same processor
+                       algorithms work  Pull migration: an idle processor pulls a
+ Soft/hard affinity        together     waiting task from busy processor
+
+No absolute rule concerning what policy is best
+
+                                                                                                                                             97
+- Applications/Scenarios
+      - Multiple processors
+      - Real-time systems
+      - Example: Linux scheduler
+      - Algorithm evaluation
+
+                                                                                                                                                                            98
+Linux Scheduler
+
+· A multiple queue, (kind of) static priority scheduler.
+
+  0   RR                        FIFO  Priorities 0 to 99 are
+                                      privileged classes.
+...   RR                        FIFO
+                                      The processes in those
+ 99                        CFS        queues are called "real-
+Norm                                  time processes".
+
+ al                                   Real-time processes are
+                                      either following RR or
+Completely Fair Scheduler             FIFO scheduling
+                                      algorithm.
+
+                                               Logical view of the
+                                                 Linux scheduler
+
+                                                                                             99
+Linux Scheduler
+
+· A multiple queue, (kind of) static priority scheduler.
+
+  0   RR                        FIFO  CFS
+
+...   RR                        FIFO  -Each process maintains virtual run
+                                      time (vruntime), recording how
+ 99                        CFS        long each has run
+Norm
+                                      -CFS selects the process that has
+ al                                   the smallest vruntime value
+
+Completely Fair Scheduler             -Decay factor: nice value (-20 to
+                                      +19): the smaller the value is, the
+                                      "higher priority" the process get
+
+                                                                           100
+Linux Scheduler
+
+· A multiple queue, (kind of) static priority scheduler.
+
+  0   RR                        FIFO  CFS
+
+...                                   -Use a red-black tree to maintain
+                                      runnable tasks
+ 99                                   -The leftmost value is cached
+Norm
+      RR                        FIFO
+ al
+                           CFS
+
+Completely Fair Scheduler
+
+                                                                         101
+- Applications/Scenarios
+      - Multiple processors
+      - Real-time systems
+      - Example: Linux scheduler
+      - Algorithm evaluation
+
+                                                                                                                                                                          102
+How to select/evaluate a scheduling algorithm?
+
+   How to select a scheduling alg? (many algorithms with different parameters and properties)
+   Step 1: Define a criteria or the importance of various measures (application dependent)
+   Step 2: Design/Select an algorithm to satisfy the requirements. How to guarantee?
+
+                        Evaluate Algorithms
+
+ Deterministic       Queueing modeling        Simulation & Implementation
+   modeling
+                 Queueing network analysis    Trace driven
+Simple and fast
+                 Distribution of CPU and I/O  High cost (coding/debugging...)
+Demonstration    burst (Poisson arrival)
+examples                                      Hard to understand the full
+                 Little's law:  =  ×          design space
+
+                                                                               103
+Summary on scheduling
+
+· So, you may ask:
+
+   ­ "What is the best scheduling algorithm?"
+   ­ "What is the standard scheduling algorithm?"
+
+· There is no best or standard algorithm because of,
+  at least, the following reasons:
+
+   ­ No one could predict how many clock ticks does a
+      process requires.
+
+   ­ On modern OS-es, processes are submitted online.
+   ­ Conflicting criterias
+
+                                                                                                                                                                            104
+Summary on part 2
+
+Process  Process           Process              User Space
+                                               Kernel Space
+
+  Process Operations       Thread 1  Thread 2
+(fork(), exec*(), wait())
+
+                           Process
+
+                   P       Process Scheduling  Scheduler
+
+       P                                                       105
+                   P
+
+Process Communication &
+      Synchronization
+
